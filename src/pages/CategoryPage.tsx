@@ -11,6 +11,7 @@ import {
   getPublicMaterials,
   getPublicSubjects,
 } from '../services/firebaseService';
+import { OFFICIAL_CSE_SEM_5_SUBJECTS } from '../constants/subjects';
 import { MaterialCard } from '../components/materials/MaterialCard';
 import { MaterialCardSkeleton } from '../components/common/Skeleton';
 import { EmptyState } from '../components/common/EmptyState';
@@ -37,9 +38,24 @@ export const CategoryPage: React.FC = () => {
           getPublicSubjects(),
         ]);
         setMaterials(mats);
-        setSubjects(subs);
+        setSubjects(
+          subs && subs.length > 0
+            ? subs
+            : OFFICIAL_CSE_SEM_5_SUBJECTS.map((s) => ({
+                ...s,
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+              }))
+        );
       } catch (err) {
         console.error('Error loading category materials:', err);
+        setSubjects(
+          OFFICIAL_CSE_SEM_5_SUBJECTS.map((s) => ({
+            ...s,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          }))
+        );
       } finally {
         setLoading(false);
       }

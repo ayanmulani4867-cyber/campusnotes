@@ -8,6 +8,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { Subject, StudyMaterial } from '../types';
+import { OFFICIAL_CSE_SEM_5_SUBJECTS } from '../constants/subjects';
 import {
   getPublicSubjects,
   getPublicMaterials,
@@ -28,10 +29,25 @@ export const SubjectsPage: React.FC = () => {
           getPublicSubjects(),
           getPublicMaterials(150),
         ]);
-        setSubjects(subs);
+        const finalSubs =
+          subs && subs.length > 0
+            ? subs
+            : OFFICIAL_CSE_SEM_5_SUBJECTS.map((s) => ({
+                ...s,
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+              }));
+        setSubjects(finalSubs);
         setMaterials(mats);
       } catch (err) {
         console.error('Error loading subjects:', err);
+        setSubjects(
+          OFFICIAL_CSE_SEM_5_SUBJECTS.map((s) => ({
+            ...s,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          }))
+        );
       } finally {
         setLoading(false);
       }
@@ -84,7 +100,7 @@ export const SubjectsPage: React.FC = () => {
               <Link
                 key={sub.id}
                 to={`/subjects/${sub.id}`}
-                className="group bg-white rounded-lg border border-slate-200 p-4 sm:p-6 hover:border-slate-300 transition-colors flex flex-col justify-between"
+                className="group bg-white rounded-lg border border-slate-200 p-4 sm:p-6 hover:border-slate-300 transition-colors flex flex-col justify-between active:scale-[0.99] active:bg-slate-50 touch-manipulation cursor-pointer"
               >
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-3">

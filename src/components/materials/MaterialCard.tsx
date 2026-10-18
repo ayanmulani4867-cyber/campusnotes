@@ -108,7 +108,17 @@ export const MaterialCard: React.FC<MaterialCardProps> = ({
         {/* Subject Name / Code */}
         <div className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-600 font-medium">
           <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0"></span>
-          <span className="truncate">{subject ? `${subject.code} — ${subject.name}` : 'CSE Semester 5'}</span>
+          {subject ? (
+            <Link
+              to={`/subjects/${subject.id}`}
+              onClick={(e) => e.stopPropagation()}
+              className="truncate hover:text-blue-600 transition-colors"
+            >
+              {subject.code} — {subject.name}
+            </Link>
+          ) : (
+            <span className="truncate">CSE Semester 5</span>
+          )}
         </div>
 
         {/* Description */}

@@ -6,6 +6,7 @@ import { Navbar } from './components/common/Navbar';
 import { Footer } from './components/common/Footer';
 import { RefreshCw } from 'lucide-react';
 import { MaintenanceGuard } from './components/common/MaintenanceGuard';
+import { ScrollToTop } from './components/common/ScrollToTop';
 
 // Eager load HomePage for instant hero first-paint
 import { HomePage } from './pages/HomePage';
@@ -55,6 +56,7 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans selection:bg-blue-600 selection:text-white">
+      <ScrollToTop />
       <Navbar />
       <main className="flex-1 flex flex-col">
         <Suspense fallback={<PageLoader />}>

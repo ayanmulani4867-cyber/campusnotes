@@ -201,7 +201,7 @@ export const HomePage: React.FC = () => {
               <Link
                 key={sub.id}
                 to={`/subjects/${sub.id}`}
-                className="bg-white border border-slate-200 rounded-lg p-4 sm:p-5 hover:border-slate-300 transition-colors flex flex-col justify-between"
+                className="bg-white border border-slate-200 rounded-lg p-4 sm:p-5 hover:border-slate-300 transition-colors flex flex-col justify-between active:scale-[0.99] active:bg-slate-50 touch-manipulation cursor-pointer"
               >
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-2">

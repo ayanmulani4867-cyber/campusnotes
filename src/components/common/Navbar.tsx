@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { CATEGORIES } from '../../types';
+import { OFFICIAL_CSE_SEM_5_SUBJECTS } from '../../constants/subjects';
 
 export const Navbar: React.FC = () => {
   const { isAuthenticated, admin } = useAuth();
@@ -272,6 +273,37 @@ export const Navbar: React.FC = () => {
             <FlaskConical className="w-4 h-4 text-purple-600" />
             <span>Experiments / Practicals (32)</span>
           </Link>
+
+          {/* Semester 5 Subjects Section */}
+          <div className="pt-2 pb-1 border-t border-slate-100">
+            <div className="flex items-center justify-between px-3 py-1">
+              <p className="text-xs font-semibold uppercase text-slate-400">
+                Semester 5 Subjects
+              </p>
+              <Link
+                to="/subjects"
+                onClick={() => setMobileMenuOpen(false)}
+                className="text-[11px] font-semibold text-blue-600 hover:text-blue-800"
+              >
+                All 9 Subjects &rarr;
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 gap-1 mt-1 max-h-56 overflow-y-auto pr-1">
+              {OFFICIAL_CSE_SEM_5_SUBJECTS.map((sub) => (
+                <Link
+                  key={sub.id}
+                  to={`/subjects/${sub.id}`}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center justify-between px-3 py-2 rounded-lg text-xs text-slate-700 hover:bg-slate-100 active:bg-slate-200 min-h-[38px] transition-colors"
+                >
+                  <span className="font-medium truncate pr-2">{sub.name}</span>
+                  <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
+                    {sub.code}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
 
           <div className="pt-2 pb-1 border-t border-slate-100">
             <p className="px-3 text-xs font-semibold uppercase text-slate-400">

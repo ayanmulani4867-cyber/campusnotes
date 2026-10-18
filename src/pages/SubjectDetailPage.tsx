@@ -10,6 +10,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import { Subject, StudyMaterial, CATEGORIES, AcademicCategory } from '../types';
+import { OFFICIAL_CSE_SEM_5_SUBJECTS } from '../constants/subjects';
 import {
   subscribeToPublicSubjects,
   subscribeToSubjectMaterials,
@@ -23,7 +24,8 @@ export const SubjectDetailPage: React.FC = () => {
 
   const [subject, setSubject] = useState<Subject | null>(null);
   const [materials, setMaterials] = useState<StudyMaterial[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [subjectLoading, setSubjectLoading] = useState(true);
+  const [materialsLoading, setMaterialsLoading] = useState(true);
 
   // Filters within subject
   const [selectedCategory, setSelectedCategory] = useState<string>('');
@@ -32,24 +34,79 @@ export const SubjectDetailPage: React.FC = () => {
   useEffect(() => {
     if (!subjectId) return;
     let isMounted = true;
-    setLoading(true);
+    setSubjectLoading(true);
+    setMaterialsLoading(true);
 
-    const unsubSubs = subscribeToPublicSubjects((subs) => {
-      if (!isMounted) return;
-      const currentSubject = subs.find((s) => s.id === subjectId) || null;
-      setSubject(currentSubject);
-    });
+    const rawId = decodeURIComponent(subjectId).trim();
+    const normalized = rawId.toLowerCase();
 
+    // 1. Instant matching from static curriculum to guarantee ZERO latency on mobile
+    const instantMatch = OFFICIAL_CSE_SEM_5_SUBJECTS.find(
+      (s) =>
+        s.id.toLowerCase() === normalized ||
+        s.code.toLowerCase() === normalized ||
+        s.name.toLowerCase() === normalized
+    );
+
+    if (instantMatch) {
+      setSubject({
+        ...instantMatch,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      setSubjectLoading(false);
+    }
+
+    const canonicalId = instantMatch ? instantMatch.id : rawId;
+
+    // 2. Real-time subscription to subjects
+    const unsubSubs = subscribeToPublicSubjects(
+      (subs) => {
+        if (!isMounted) return;
+        const currentSubject =
+          subs.find(
+            (s) =>
+              s.id.toLowerCase() === normalized ||
+              s.code.toLowerCase() === normalized ||
+              s.name.toLowerCase() === normalized
+          ) ||
+          instantMatch ||
+          null;
+
+        if (currentSubject) {
+          setSubject({
+            ...currentSubject,
+            createdAt:
+              'createdAt' in currentSubject && typeof currentSubject.createdAt === 'number'
+                ? currentSubject.createdAt
+                : Date.now(),
+            updatedAt:
+              'updatedAt' in currentSubject && typeof currentSubject.updatedAt === 'number'
+                ? currentSubject.updatedAt
+                : Date.now(),
+          });
+        } else {
+          setSubject(null);
+        }
+        setSubjectLoading(false);
+      },
+      (err) => {
+        console.warn('Subject detail subjects listener notice:', err);
+        if (isMounted) setSubjectLoading(false);
+      }
+    );
+
+    // 3. Real-time subscription to materials for this subject
     const unsubMats = subscribeToSubjectMaterials(
-      subjectId,
+      canonicalId,
       (mats) => {
         if (!isMounted) return;
         setMaterials(mats);
-        setLoading(false);
+        setMaterialsLoading(false);
       },
       (err) => {
         console.warn('Subject materials listener warning:', err);
-        if (isMounted) setLoading(false);
+        if (isMounted) setMaterialsLoading(false);
       }
     );
 
@@ -79,7 +136,7 @@ export const SubjectDetailPage: React.FC = () => {
     });
   }, [materials, selectedCategory, searchQuery]);
 
-  if (!loading && !subject) {
+  if (!subjectLoading && !subject) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-16 text-center">
         <EmptyState
@@ -106,28 +163,36 @@ export const SubjectDetailPage: React.FC = () => {
         </Link>
 
         {/* Subject Header Banner */}
-        <div className="bg-white rounded-lg border border-slate-200 p-4 sm:p-8">
-          <div className="flex flex-wrap items-center gap-2 mb-3">
-            <span className="font-mono text-xs sm:text-sm font-medium px-2.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-              {subject?.code}
-            </span>
-            <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-              CSE Semester 5
-            </span>
-            <span className="text-xs font-medium text-slate-700 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
-              {materials.length} Published {materials.length === 1 ? 'Resource' : 'Resources'}
-            </span>
+        {subjectLoading && !subject ? (
+          <div className="bg-white rounded-lg border border-slate-200 p-4 sm:p-8 animate-pulse space-y-3">
+            <div className="h-5 bg-slate-200 rounded w-24"></div>
+            <div className="h-8 bg-slate-200 rounded w-3/4"></div>
+            <div className="h-4 bg-slate-200 rounded w-1/2"></div>
           </div>
+        ) : (
+          <div className="bg-white rounded-lg border border-slate-200 p-4 sm:p-8">
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <span className="font-mono text-xs sm:text-sm font-medium px-2.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                {subject?.code}
+              </span>
+              <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                CSE Semester 5
+              </span>
+              <span className="text-xs font-medium text-slate-700 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                {materials.length} Published {materials.length === 1 ? 'Resource' : 'Resources'}
+              </span>
+            </div>
 
-          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-900 break-words">
-            {subject?.name}
-          </h1>
+            <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-900 break-words">
+              {subject?.name}
+            </h1>
 
-          <p className="text-xs sm:text-sm text-slate-600 mt-3 max-w-3xl leading-relaxed break-words">
-            {subject?.description ||
-              'Access all university examination notes, lab experiments, previous year question papers, and assignment sheets for this subject.'}
-          </p>
-        </div>
+            <p className="text-xs sm:text-sm text-slate-600 mt-3 max-w-3xl leading-relaxed break-words">
+              {subject?.description ||
+                'Access all university examination notes, lab experiments, previous year question papers, and assignment sheets for this subject.'}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Category Tabs & Quick Search */}
@@ -187,7 +252,7 @@ export const SubjectDetailPage: React.FC = () => {
       </div>
 
       {/* Materials List */}
-      {loading ? (
+      {materialsLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
           <MaterialCardSkeleton />
           <MaterialCardSkeleton />
