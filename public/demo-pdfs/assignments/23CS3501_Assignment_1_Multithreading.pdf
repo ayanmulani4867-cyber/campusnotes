@@ -1,0 +1,92 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Length 1604 >>
+stream
+BT
+/F1 20 Tf
+50 780 Td
+(CampusNotes - Academic Study Resource) Tj
+/F2 10 Tf
+0 -18 Td
+(DEPARTMENT OF COMPUTER SCIENCE & ENGINEERING - SEMESTER 5) Tj
+/F1 11 Tf
+0 -24 Td
+(OFFICIAL ACADEMIC STUDY MATERIAL - CSE CURRICULUM) Tj
+/F2 9 Tf
+0 -16 Td
+(____________________________________________________________________________________) Tj
+/F1 14 Tf
+0 -28 Td
+(Assignment 1: Multithreading & Concurrency Synchronization) Tj
+/F2 11 Tf
+0 -20 Td
+(Course: Advanced Java Programming [23CS3501]) Tj
+/F2 11 Tf
+0 -16 Td
+(Category: Assignments  |  Assignment #1  |  Academic Year: 2026-27) Tj
+/F2 9 Tf
+0 -16 Td
+(____________________________________________________________________________________) Tj
+/F1 12 Tf
+0 -26 Td
+(1. Overview & Objective:) Tj
+/F2 10 Tf
+0 -18 Td
+(Implement robust thread synchronization, lock mechanisms, and deadlock prevention.) Tj
+/F1 12 Tf
+0 -28 Td
+(2. Assignment Problems & Instructions:) Tj
+/F2 10 Tf
+0 -18 Td
+(1. Explain thread lifecycle states and how Thread.sleep   differs from Object.wait  .) Tj
+/F2 10 Tf
+0 -18 Td
+(2. Implement a synchronized bounded-buffer Producer-Consumer queue in Java.) Tj
+/F2 10 Tf
+0 -18 Td
+(3. Demonstrate ReentrantLock and Condition variables compared to synchronized blocks.) Tj
+/F2 10 Tf
+0 -18 Td
+(4. Write a program causing and detecting thread deadlock using ThreadMXBean.) Tj
+/F1 10 Tf
+0 -36 Td
+(Submission Guidelines & Verification:) Tj
+/F2 9 Tf
+0 -16 Td
+(This document verifies end-to-end PDF storage, preview, and download for CampusNotes.) Tj
+/F2 9 Tf
+0 -14 Td
+(Administrators can safely edit metadata, publish/unpublish, or replace this document.) Tj
+ET
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000257 00000 n 
+0000000332 00000 n 
+0000000402 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+2057
+%%EOF
