@@ -8,6 +8,8 @@ import {
   Filter,
   FileText,
   Calendar,
+  X,
+  RotateCcw,
 } from 'lucide-react';
 import { Subject, StudyMaterial, CATEGORIES, AcademicCategory } from '../types';
 import { OFFICIAL_CSE_SEM_5_SUBJECTS } from '../constants/subjects';
@@ -136,9 +138,11 @@ export const SubjectDetailPage: React.FC = () => {
     });
   }, [materials, selectedCategory, searchQuery]);
 
+  const activeCategoryMeta = CATEGORIES.find((c) => c.id === selectedCategory);
+
   if (!subjectLoading && !subject) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+      <div className="max-w-4xl mx-auto px-4 py-12 sm:py-16 text-center">
         <EmptyState
           icon="folder"
           title="Subject Not Found"
@@ -151,12 +155,12 @@ export const SubjectDetailPage: React.FC = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-12 space-y-6 sm:space-y-8">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-12 space-y-4 sm:space-y-6 lg:space-y-8">
       {/* Back Link */}
       <div>
         <Link
           to="/subjects"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-blue-600 transition-colors mb-4"
+          className="min-h-[44px] inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-600 hover:text-blue-600 active:text-blue-700 transition-colors mb-2 sm:mb-4 px-2 py-1 -ml-2 rounded-lg hover:bg-slate-100 active:bg-slate-200"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Subjects</span>
@@ -164,30 +168,30 @@ export const SubjectDetailPage: React.FC = () => {
 
         {/* Subject Header Banner */}
         {subjectLoading && !subject ? (
-          <div className="bg-white rounded-lg border border-slate-200 p-4 sm:p-8 animate-pulse space-y-3">
-            <div className="h-5 bg-slate-200 rounded w-24"></div>
-            <div className="h-8 bg-slate-200 rounded w-3/4"></div>
+          <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 p-4 sm:p-6 lg:p-8 animate-pulse space-y-3 shadow-sm">
+            <div className="h-5 bg-slate-200 rounded w-28"></div>
+            <div className="h-7 sm:h-9 bg-slate-200 rounded w-3/4"></div>
             <div className="h-4 bg-slate-200 rounded w-1/2"></div>
           </div>
         ) : (
-          <div className="bg-white rounded-lg border border-slate-200 p-4 sm:p-8">
-            <div className="flex flex-wrap items-center gap-2 mb-3">
-              <span className="font-mono text-xs sm:text-sm font-medium px-2.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+          <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 p-4 sm:p-6 lg:p-8 shadow-sm">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-2.5 sm:mb-3">
+              <span className="font-mono text-xs sm:text-sm font-bold px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
                 {subject?.code}
               </span>
-              <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+              <span className="text-[11px] sm:text-xs font-medium text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-md border border-slate-200">
                 CSE Semester 5
               </span>
-              <span className="text-xs font-medium text-slate-700 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+              <span className="text-[11px] sm:text-xs font-semibold text-slate-700 bg-slate-50 px-2.5 py-0.5 rounded-md border border-slate-200">
                 {materials.length} Published {materials.length === 1 ? 'Resource' : 'Resources'}
               </span>
             </div>
 
-            <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-900 break-words">
+            <h1 className="text-xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-slate-900 break-words leading-snug">
               {subject?.name}
             </h1>
 
-            <p className="text-xs sm:text-sm text-slate-600 mt-3 max-w-3xl leading-relaxed break-words">
+            <p className="text-xs sm:text-sm text-slate-600 mt-2 sm:mt-3 leading-relaxed break-words">
               {subject?.description ||
                 'Access all university examination notes, lab experiments, previous year question papers, and assignment sheets for this subject.'}
             </p>
@@ -196,16 +200,39 @@ export const SubjectDetailPage: React.FC = () => {
       </div>
 
       {/* Category Tabs & Quick Search */}
-      <div className="space-y-4">
-        {/* Category Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 no-scrollbar -mx-1 px-1">
+      <div className="space-y-3">
+        {/* Mobile Quick Category Selector Dropdown (visible on narrow screens) */}
+        <div className="sm:hidden">
+          <label htmlFor="mobile-cat-select" className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1 px-1">
+            Browse Category
+          </label>
+          <select
+            id="mobile-cat-select"
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="w-full min-h-[44px] px-3.5 py-2.5 text-xs font-semibold bg-white border border-slate-200 rounded-xl text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+          >
+            <option value="">All Resources ({materials.length})</option>
+            {CATEGORIES.map((cat) => {
+              const count = materials.filter((m) => m.category === cat.id && m.published).length;
+              return (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name} ({count})
+                </option>
+              );
+            })}
+          </select>
+        </div>
+
+        {/* Edge-to-edge Horizontal Category Pills */}
+        <div className="-mx-3 px-3 sm:mx-0 sm:px-0 flex items-center gap-1.5 overflow-x-auto pb-1.5 no-scrollbar scroll-smooth touch-pan-x">
           <button
             type="button"
             onClick={() => setSelectedCategory('')}
-            className={`min-h-[38px] px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors shrink-0 ${
+            className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 active:scale-95 ${
               !selectedCategory
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
+                : 'bg-white text-slate-700 hover:bg-slate-50 active:bg-slate-100 border border-slate-200 shadow-sm'
             }`}
           >
             All Resources ({materials.length})
@@ -219,16 +246,16 @@ export const SubjectDetailPage: React.FC = () => {
                 key={cat.id}
                 type="button"
                 onClick={() => setSelectedCategory(isSelected ? '' : cat.id)}
-                className={`min-h-[38px] px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 shrink-0 ${
+                className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 shrink-0 active:scale-95 ${
                   isSelected
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
+                    : 'bg-white text-slate-700 hover:bg-slate-50 active:bg-slate-100 border border-slate-200 shadow-sm'
                 }`}
               >
                 <span>{cat.shortName}</span>
                 <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                    isSelected ? 'bg-blue-700 text-blue-100' : 'bg-slate-100 text-slate-500'
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                    isSelected ? 'bg-blue-700 text-blue-100' : 'bg-slate-100 text-slate-600'
                   }`}
                 >
                   {count}
@@ -239,21 +266,53 @@ export const SubjectDetailPage: React.FC = () => {
         </div>
 
         {/* Search within subject */}
-        <div className="relative max-w-md">
+        <div className="relative max-w-md w-full">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={`Search within ${subject?.name || 'this subject'}...`}
-            className="w-full min-h-[42px] pl-10 pr-4 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-800 placeholder:text-slate-400"
+            placeholder={`Search within ${subject?.code || 'this subject'}...`}
+            className="w-full min-h-[44px] pl-10 pr-10 py-2.5 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-800 placeholder:text-slate-400 shadow-sm transition-all"
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600"
+              aria-label="Clear search"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
+
+        {/* Active Filter Summary Bar */}
+        {(selectedCategory || searchQuery) && (
+          <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-blue-50/80 border border-blue-100 rounded-xl text-xs text-blue-900">
+            <span className="font-medium">
+              Showing {filteredMaterials.length} of {materials.length} resources
+              {activeCategoryMeta && ` under "${activeCategoryMeta.name}"`}
+              {searchQuery && ` matching "${searchQuery}"`}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedCategory('');
+                setSearchQuery('');
+              }}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:text-blue-900 underline min-h-[36px] px-2 active:opacity-75"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Materials List */}
       {materialsLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 sm:gap-6">
           <MaterialCardSkeleton />
           <MaterialCardSkeleton />
           <MaterialCardSkeleton />
@@ -265,15 +324,15 @@ export const SubjectDetailPage: React.FC = () => {
           title="No Materials in this Category"
           description={
             selectedCategory
-              ? `No published study materials under ${selectedCategory} for ${subject?.name}.`
-              : `No published study materials found for ${subject?.name} yet.`
+              ? `No published study materials under ${activeCategoryMeta?.name || selectedCategory} for ${subject?.name}.`
+              : `No published study materials found for ${subject?.name} matching your filter.`
           }
           actionText={selectedCategory ? 'Show All Subject Materials' : 'Explore Other Subjects'}
           onActionClick={selectedCategory ? () => setSelectedCategory('') : undefined}
           actionTo={!selectedCategory ? '/subjects' : undefined}
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 sm:gap-6">
           {filteredMaterials.map((m) => (
             <MaterialCard key={m.id} material={m} subject={subject || undefined} />
           ))}

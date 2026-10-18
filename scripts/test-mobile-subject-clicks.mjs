@@ -69,6 +69,20 @@ it('SubjectDetailPage shows header skeleton during unknown subject load', () => 
   assert(subjectDetailContent.includes('animate-pulse'), 'Must render pulse skeleton');
 });
 
+it('SubjectDetailPage has mobile-optimized Category dropdown for small screens', () => {
+  assert(subjectDetailContent.includes('id="mobile-cat-select"'), 'Must have mobile category select');
+  assert(subjectDetailContent.includes('sm:hidden'), 'Must be visible on mobile screens');
+});
+
+it('SubjectDetailPage category chip bar supports edge-to-edge touch scrolling', () => {
+  assert(subjectDetailContent.includes('touch-pan-x'), 'Must support touch-pan-x');
+  assert(subjectDetailContent.includes('overflow-x-auto'), 'Must support overflow-x-auto');
+});
+
+it('SubjectDetailPage back button has touch-friendly min-h-[44px]', () => {
+  assert(subjectDetailContent.includes('min-h-[44px] inline-flex items-center gap-2'), 'Back button must have min-h-[44px]');
+});
+
 // 3. Navbar Mobile Drawer Subjects List
 console.log('\n--- Test Suite 3: Navbar Mobile Drawer Subjects Section ---');
 const navbarPath = path.resolve('src/components/common/Navbar.tsx');

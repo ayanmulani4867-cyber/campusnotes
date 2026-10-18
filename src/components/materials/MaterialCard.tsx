@@ -81,7 +81,7 @@ export const MaterialCard: React.FC<MaterialCardProps> = ({
   };
 
   return (
-    <div className="group bg-white rounded-lg border border-slate-200 p-4 sm:p-5 hover:border-slate-300 transition-colors flex flex-col justify-between">
+    <div className="group bg-white rounded-xl sm:rounded-2xl border border-slate-200/90 p-4 sm:p-5 hover:border-slate-300 hover:shadow-md transition-all flex flex-col justify-between active:scale-[0.99] touch-manipulation shadow-sm">
       <div>
         {/* Badges Bar: Category & Academic Year */}
         <div className="flex items-center justify-between gap-2 mb-3">

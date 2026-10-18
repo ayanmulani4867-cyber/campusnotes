@@ -90,24 +90,24 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material }) => {
     : '';
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-sm flex flex-col h-[520px] sm:h-[650px] lg:h-[750px] max-h-[85vh]">
+    <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200/80 overflow-hidden shadow-sm flex flex-col h-[440px] sm:h-[650px] lg:h-[750px] max-h-[82vh]">
       {/* Viewer Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 px-3 sm:px-4 py-2.5 sm:py-3 bg-white border-b border-slate-200 text-slate-900 flex-shrink-0">
-        <div className="flex items-center gap-2 min-w-0 max-w-[50%] sm:max-w-[60%]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-3 sm:px-4 py-2.5 sm:py-3 bg-white border-b border-slate-200 text-slate-900 flex-shrink-0">
+        <div className="flex items-center gap-2 min-w-0 w-full sm:w-auto sm:max-w-[55%]">
           <FileText className="w-4 h-4 text-blue-600 flex-shrink-0" />
           <span className="text-xs sm:text-sm font-semibold text-slate-900 truncate">
             {material.fileName || material.title}
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 w-full sm:w-auto">
           {/* Share button */}
           <button
             type="button"
             onClick={handleShare}
             aria-label={`Share ${material.title}`}
             title={copied ? 'Link Copied!' : 'Share Material'}
-            className={`min-h-[38px] px-2.5 sm:px-3 py-1.5 inline-flex items-center gap-1.5 rounded-lg text-xs font-medium border transition-colors ${
+            className={`flex-1 sm:flex-none min-h-[38px] sm:min-h-[40px] px-2.5 sm:px-3 py-1.5 inline-flex items-center justify-center gap-1.5 rounded-lg text-xs font-semibold border transition-colors ${
               copied
                 ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
                 : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200 active:bg-slate-200'
@@ -118,7 +118,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material }) => {
             ) : (
               <Share2 className="w-3.5 h-3.5 text-slate-600" />
             )}
-            <span className="hidden sm:inline">{copied ? 'Copied!' : 'Share'}</span>
+            <span>{copied ? 'Copied!' : 'Share'}</span>
           </button>
 
           {/* Open direct in new tab */}
@@ -127,11 +127,11 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material }) => {
               href={resolvedUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="min-h-[38px] inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium border border-slate-200 transition-colors"
+              className="flex-1 sm:flex-none min-h-[38px] sm:min-h-[40px] inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 transition-colors"
               title="Open in new window"
             >
               <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
-              <span className="hidden sm:inline">Open Fullscreen</span>
+              <span>Fullscreen</span>
             </a>
           )}
 
@@ -140,7 +140,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material }) => {
             type="button"
             onClick={handleDownload}
             disabled={downloading}
-            className="min-h-[38px] inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-sm disabled:opacity-50"
+            className="flex-1 sm:flex-none min-h-[38px] sm:min-h-[40px] inline-flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-sm disabled:opacity-50"
           >
             {downloading ? (
               <RefreshCw className="w-3.5 h-3.5 animate-spin" />
