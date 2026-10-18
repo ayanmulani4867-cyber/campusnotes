@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { GraduationCap, ShieldCheck } from 'lucide-react';
+import { GraduationCap } from 'lucide-react';
 import { CATEGORIES } from '../../types';
 
 export const Footer: React.FC = () => {
@@ -16,12 +16,6 @@ export const Footer: React.FC = () => {
               </div>
               <span className="text-xl font-bold tracking-tight text-slate-900">CampusNotes</span>
             </Link>
-            <p className="text-sm text-slate-500 max-w-md leading-relaxed">
-              Curated study materials for Computer Science & Engineering Semester 5. Free access to verified notes, assignments, lab practicals, and previous year question papers.
-            </p>
-            <p className="text-xs text-slate-400">
-              Free public access &bull; No student login required
-            </p>
           </div>
 
           {/* Col 2: Categories */}
@@ -51,7 +45,7 @@ export const Footer: React.FC = () => {
             </ul>
           </div>
 
-          {/* Col 3: Navigation & Admin */}
+          {/* Col 3: Navigation */}
           <div>
             <h3 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-3">
               Quick Links
@@ -67,29 +61,21 @@ export const Footer: React.FC = () => {
                   About
                 </Link>
               </li>
-              <li>
-                <Link
-                  to="/admin/login"
-                  className="text-slate-500 hover:text-slate-900 transition-colors inline-flex items-center gap-1.5"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Admin Login</span>
-                </Link>
-              </li>
             </ul>
           </div>
         </div>
 
         {/* Bottom Bar */}
-        <div className="mt-8 pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
+        <div className="mt-8 pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 text-center sm:text-left">
           <p>
-            &copy; {new Date().getFullYear()} CampusNotes. Designed for Computer Science & Engineering Semester 5.
+            &copy; {new Date().getFullYear()} CampusNotes
           </p>
-          <p>
-            All academic materials are intended for study and revision purposes.
+          <p className="font-medium text-slate-600">
+            Developed & Managed by Ayan
           </p>
         </div>
       </div>
     </footer>
   );
 };
+

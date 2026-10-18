@@ -176,9 +176,9 @@ export const Navbar: React.FC = () => {
             </Link>
           </nav>
 
-          {/* Right Action: Admin Access */}
-          <div className="hidden sm:flex items-center gap-2">
-            {isAuthenticated ? (
+          {/* Right Action: Admin Access (authenticated admins only) */}
+          {isAuthenticated && (
+            <div className="hidden sm:flex items-center gap-2">
               <Link
                 to="/admin/dashboard"
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors"
@@ -186,16 +186,8 @@ export const Navbar: React.FC = () => {
                 <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
                 <span>Admin Dashboard</span>
               </Link>
-            ) : (
-              <Link
-                to="/admin/login"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
-                <span>Admin</span>
-              </Link>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Mobile Menu Button */}
           <div className="flex lg:hidden items-center">
@@ -332,8 +324,8 @@ export const Navbar: React.FC = () => {
             <span>About</span>
           </Link>
 
-          <div className="pt-2 border-t border-slate-100">
-            {isAuthenticated ? (
+          {isAuthenticated && (
+            <div className="pt-2 border-t border-slate-100">
               <Link
                 to="/admin/dashboard"
                 onClick={() => setMobileMenuOpen(false)}
@@ -342,17 +334,8 @@ export const Navbar: React.FC = () => {
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
                 <span>Admin Dashboard</span>
               </Link>
-            ) : (
-              <Link
-                to="/admin/login"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center justify-center gap-2 w-full min-h-[44px] py-2 bg-slate-100 text-slate-700 font-medium rounded-lg text-sm active:bg-slate-200"
-              >
-                <ShieldCheck className="w-4 h-4 text-slate-500" />
-                <span>Admin Login</span>
-              </Link>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
     </header>
