@@ -78,14 +78,14 @@ export const AdminLoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[80vh] flex flex-col items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md space-y-6">
+    <div className="min-h-[80vh] flex flex-col items-center justify-center px-4 py-6 sm:py-12">
+      <div className="w-full max-w-md space-y-5 sm:space-y-6">
         {/* Portal Icon & Branding */}
         <div className="text-center space-y-2">
           <div className="inline-flex w-12 h-12 rounded-lg bg-blue-600 text-white items-center justify-center mb-1 shadow-sm">
             <ShieldCheck className="w-6 h-6" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
             Administrator Login
           </h1>
           <p className="text-xs sm:text-sm text-slate-500">
@@ -94,9 +94,9 @@ export const AdminLoginPage: React.FC = () => {
         </div>
 
         {/* Development Setup Callout */}
-        <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 text-xs flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Key className="w-4 h-4 text-slate-500 flex-shrink-0" />
+        <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-start sm:items-center gap-2">
+            <Key className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5 sm:mt-0" />
             <div>
               <p className="font-semibold text-slate-800">Initial Setup Credentials</p>
               <p className="text-[11px] text-slate-500">
@@ -107,7 +107,7 @@ export const AdminLoginPage: React.FC = () => {
           <button
             type="button"
             onClick={handleFillDevCredentials}
-            className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 underline whitespace-nowrap"
+            className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 active:text-blue-900 underline whitespace-nowrap self-start sm:self-auto min-h-[32px] inline-flex items-center"
           >
             Use Setup Credentials
           </button>
@@ -117,22 +117,22 @@ export const AdminLoginPage: React.FC = () => {
         {!isFirebaseConfigured && (
           <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-xs space-y-1">
             <div className="flex items-center gap-1.5 font-bold">
-              <AlertCircle className="w-4 h-4 text-amber-600" />
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
               <span>Firebase Notice</span>
             </div>
-            <p className="text-amber-800 leading-relaxed">
+            <p className="text-amber-800 leading-relaxed break-words">
               Firebase configuration pending in <code>.env</code>. Local development credentials (<code className="font-mono font-semibold">admin/admin</code>) are active.
             </p>
           </div>
         )}
 
         {/* Login Form Card */}
-        <div className="bg-white rounded-lg border border-slate-200 p-6 sm:p-8">
+        <div className="bg-white rounded-lg border border-slate-200 p-4 sm:p-8">
           <form onSubmit={handleSubmit} className="space-y-4">
             {errorMessage && (
               <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-900 text-xs flex items-start gap-2.5 animate-in fade-in">
                 <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
-                <span className="leading-relaxed font-medium">{errorMessage}</span>
+                <span className="leading-relaxed font-medium break-words">{errorMessage}</span>
               </div>
             )}
 
@@ -148,7 +148,7 @@ export const AdminLoginPage: React.FC = () => {
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   placeholder="admin"
-                  className="w-full pl-10 pr-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
+                  className="w-full min-h-[44px] pl-10 pr-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
                 />
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
@@ -168,7 +168,7 @@ export const AdminLoginPage: React.FC = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="admin"
-                  className="w-full pl-10 pr-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
+                  className="w-full min-h-[44px] pl-10 pr-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
                 />
               </div>
             </div>
@@ -176,7 +176,7 @@ export const AdminLoginPage: React.FC = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full min-h-[44px] py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {loading ? (
                 <span>Authenticating...</span>
@@ -201,38 +201,38 @@ export const AdminLoginPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setShowSetupGuide(!showSetupGuide)}
-            className="w-full px-5 py-3.5 flex items-center justify-between text-left text-xs font-medium text-slate-700 hover:bg-slate-100 transition-colors"
+            className="w-full min-h-[44px] px-4 sm:px-5 py-3 flex items-center justify-between text-left text-xs font-medium text-slate-700 hover:bg-slate-100 transition-colors"
           >
             <span className="flex items-center gap-2">
-              <HelpCircle className="w-4 h-4 text-blue-600" />
+              <HelpCircle className="w-4 h-4 text-blue-600 shrink-0" />
               <span>Production Admin Provisioning Guide</span>
             </span>
             {showSetupGuide ? (
-              <ChevronUp className="w-4 h-4 text-slate-400" />
+              <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" />
             ) : (
-              <ChevronDown className="w-4 h-4 text-slate-400" />
+              <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
             )}
           </button>
 
           {showSetupGuide && (
-            <div className="px-5 pb-5 pt-1 text-xs text-slate-600 space-y-3 border-t border-slate-200/80 animate-in fade-in">
+            <div className="px-4 sm:px-5 pb-5 pt-1 text-xs text-slate-600 space-y-3 border-t border-slate-200/80 animate-in fade-in">
               <p className="leading-relaxed">
                 For production deployment, provision a dedicated administrator through Firebase Authentication:
               </p>
-              <ol className="list-decimal list-inside space-y-1.5 pl-1 text-[11px] text-slate-700">
+              <ol className="list-decimal list-inside space-y-1.5 pl-1 text-[11px] text-slate-700 break-words">
                 <li>
                   Run the provisioning helper: <code>node scripts/init-admin.mjs</code>.
                 </li>
                 <li>
                   Or open <strong>Firebase Console &rarr; Authentication &rarr; Users</strong> and add user:
-                  <div className="mt-1 font-mono text-[10px] text-blue-700">admin@campusnotes.internal</div>
+                  <div className="mt-1 font-mono text-[10px] text-blue-700 break-all">admin@campusnotes.internal</div>
                 </li>
                 <li>
                   Copy the generated <strong>User UID</strong>.
                 </li>
                 <li>
                   In Realtime Database (<code>{DEFAULT_DATABASE_URL}</code>), register:
-                  <div className="mt-1 font-mono text-[10px] text-emerald-700">admins/&lt;UID&gt;: true</div>
+                  <div className="mt-1 font-mono text-[10px] text-emerald-700 break-all">admins/&lt;UID&gt;: true</div>
                 </li>
               </ol>
             </div>

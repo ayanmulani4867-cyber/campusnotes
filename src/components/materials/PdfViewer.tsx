@@ -5,9 +5,12 @@ import {
   FileText,
   AlertCircle,
   RefreshCw,
+  Share2,
+  Check,
 } from 'lucide-react';
 import { StudyMaterial } from '../../types';
 import { fetchPdfBlobUrl, downloadStudyMaterial } from '../../services/firebaseService';
+import { shareMaterial } from '../../utils/shareUtils';
 import { useToast } from '../../context/ToastContext';
 
 interface PdfViewerProps {
@@ -21,6 +24,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material }) => {
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -64,6 +68,16 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material }) => {
     }
   };
 
+  const handleShare = async () => {
+    const success = await shareMaterial(material, (title, msg) => {
+      toast.success(title, msg);
+    });
+    if (success) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }
+  };
+
   const isLocalOrBlob =
     resolvedUrl?.startsWith('blob:') ||
     resolvedUrl?.startsWith('/') ||
@@ -76,24 +90,44 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material }) => {
     : '';
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-sm flex flex-col h-[750px] max-h-[85vh]">
+    <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-sm flex flex-col h-[520px] sm:h-[650px] lg:h-[750px] max-h-[85vh]">
       {/* Viewer Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-white border-b border-slate-200 text-slate-900 flex-shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 px-3 sm:px-4 py-2.5 sm:py-3 bg-white border-b border-slate-200 text-slate-900 flex-shrink-0">
+        <div className="flex items-center gap-2 min-w-0 max-w-[50%] sm:max-w-[60%]">
           <FileText className="w-4 h-4 text-blue-600 flex-shrink-0" />
-          <span className="text-xs sm:text-sm font-semibold text-slate-900 truncate max-w-[200px] sm:max-w-md">
+          <span className="text-xs sm:text-sm font-semibold text-slate-900 truncate">
             {material.fileName || material.title}
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Share button */}
+          <button
+            type="button"
+            onClick={handleShare}
+            aria-label={`Share ${material.title}`}
+            title={copied ? 'Link Copied!' : 'Share Material'}
+            className={`min-h-[38px] px-2.5 sm:px-3 py-1.5 inline-flex items-center gap-1.5 rounded-lg text-xs font-medium border transition-colors ${
+              copied
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200 active:bg-slate-200'
+            }`}
+          >
+            {copied ? (
+              <Check className="w-3.5 h-3.5 text-emerald-600" />
+            ) : (
+              <Share2 className="w-3.5 h-3.5 text-slate-600" />
+            )}
+            <span className="hidden sm:inline">{copied ? 'Copied!' : 'Share'}</span>
+          </button>
+
           {/* Open direct in new tab */}
           {resolvedUrl && (
             <a
               href={resolvedUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium border border-slate-200 transition-colors"
+              className="min-h-[38px] inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium border border-slate-200 transition-colors"
               title="Open in new window"
             >
               <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
@@ -106,14 +140,14 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material }) => {
             type="button"
             onClick={handleDownload}
             disabled={downloading}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-sm disabled:opacity-50"
+            className="min-h-[38px] inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-sm disabled:opacity-50"
           >
             {downloading ? (
               <RefreshCw className="w-3.5 h-3.5 animate-spin" />
             ) : (
               <Download className="w-3.5 h-3.5" />
             )}
-            <span>{downloading ? 'Downloading...' : 'Download'}</span>
+            <span>{downloading ? 'Preparing...' : 'Download'}</span>
           </button>
         </div>
       </div>
@@ -176,9 +210,9 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material }) => {
       </div>
 
       {/* Viewer Footer Status */}
-      <div className="px-4 py-2 bg-white border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-400">
+      <div className="px-3 sm:px-4 py-2 bg-white border-t border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 text-[11px] text-slate-400">
         <span>Verified Academic Document • CSE Semester 5</span>
-        <span>Realtime Database Secure Delivery</span>
+        <span className="hidden sm:inline">Realtime Database Secure Delivery</span>
       </div>
     </div>
   );

@@ -172,19 +172,19 @@ export const ReplacePdfModal: React.FC<ReplacePdfModalProps> = ({
         )}
 
         {/* Actions */}
-        <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-3 border-t border-slate-100">
           <button
             type="button"
             onClick={onClose}
             disabled={isReplacing}
-            className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
+            className="w-full sm:w-auto min-h-[42px] px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 text-center"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={isReplacing || !selectedFile}
-            className="px-5 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+            className="w-full sm:w-auto min-h-[42px] px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
           >
             {isReplacing ? (
               <>

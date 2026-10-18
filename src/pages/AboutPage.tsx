@@ -13,23 +13,23 @@ import {
 
 export const AboutPage: React.FC = () => {
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-12">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-16 space-y-8 sm:space-y-12">
       {/* Header */}
-      <div className="text-center space-y-4">
+      <div className="text-center space-y-3 sm:space-y-4">
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 text-xs font-semibold">
-          <GraduationCap className="w-4 h-4" />
-          <span>Strict Academic Scope: CSE Semester 5 ONLY</span>
+          <GraduationCap className="w-4 h-4 shrink-0" />
+          <span className="truncate">Strict Academic Scope: CSE Semester 5 ONLY</span>
         </div>
-        <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900">
+        <h1 className="text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-slate-900 break-words">
           About CampusNotes
         </h1>
-        <p className="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
+        <p className="text-sm sm:text-base md:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
           Fast, clean study materials platform engineered specifically for 5th Semester Computer Science & Engineering students.
         </p>
       </div>
 
       {/* Scope Mission Card */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 p-8 sm:p-10 shadow-sm space-y-6">
+      <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 p-5 sm:p-10 shadow-sm space-y-6">
         <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
           Academic Focus & Mission
         </h2>

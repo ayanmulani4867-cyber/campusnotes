@@ -94,7 +94,7 @@ export const SubjectDetailPage: React.FC = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-12 space-y-6 sm:space-y-8">
       {/* Back Link */}
       <div>
         <Link
@@ -106,7 +106,7 @@ export const SubjectDetailPage: React.FC = () => {
         </Link>
 
         {/* Subject Header Banner */}
-        <div className="bg-white rounded-lg border border-slate-200 p-6 sm:p-8">
+        <div className="bg-white rounded-lg border border-slate-200 p-4 sm:p-8">
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <span className="font-mono text-xs sm:text-sm font-medium px-2.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
               {subject?.code}
@@ -119,11 +119,11 @@ export const SubjectDetailPage: React.FC = () => {
             </span>
           </div>
 
-          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
+          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-900 break-words">
             {subject?.name}
           </h1>
 
-          <p className="text-sm text-slate-600 mt-3 max-w-3xl leading-relaxed">
+          <p className="text-xs sm:text-sm text-slate-600 mt-3 max-w-3xl leading-relaxed break-words">
             {subject?.description ||
               'Access all university examination notes, lab experiments, previous year question papers, and assignment sheets for this subject.'}
           </p>
@@ -133,11 +133,11 @@ export const SubjectDetailPage: React.FC = () => {
       {/* Category Tabs & Quick Search */}
       <div className="space-y-4">
         {/* Category Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 no-scrollbar -mx-1 px-1">
           <button
             type="button"
             onClick={() => setSelectedCategory('')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+            className={`min-h-[38px] px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors shrink-0 ${
               !selectedCategory
                 ? 'bg-blue-600 text-white'
                 : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
@@ -154,7 +154,7 @@ export const SubjectDetailPage: React.FC = () => {
                 key={cat.id}
                 type="button"
                 onClick={() => setSelectedCategory(isSelected ? '' : cat.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                className={`min-h-[38px] px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 shrink-0 ${
                   isSelected
                     ? 'bg-blue-600 text-white'
                     : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
@@ -181,14 +181,14 @@ export const SubjectDetailPage: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={`Search within ${subject?.name || 'this subject'}...`}
-            className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-800 placeholder:text-slate-400"
+            className="w-full min-h-[42px] pl-10 pr-4 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-800 placeholder:text-slate-400"
           />
         </div>
       </div>
 
       {/* Materials List */}
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
           <MaterialCardSkeleton />
           <MaterialCardSkeleton />
           <MaterialCardSkeleton />
@@ -208,7 +208,7 @@ export const SubjectDetailPage: React.FC = () => {
           actionTo={!selectedCategory ? '/subjects' : undefined}
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
           {filteredMaterials.map((m) => (
             <MaterialCard key={m.id} material={m} subject={subject || undefined} />
           ))}

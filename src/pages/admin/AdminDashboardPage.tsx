@@ -436,7 +436,7 @@ export const AdminDashboardPage: React.FC = () => {
         <button
           type="button"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="p-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+          className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center p-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 active:bg-slate-100"
           aria-label="Toggle Navigation Menu"
         >
           {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -457,10 +457,10 @@ export const AdminDashboardPage: React.FC = () => {
                   setActiveTab(item.id);
                   setMobileMenuOpen(false);
                 }}
-                className={`w-full flex items-center justify-between gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-left transition-colors ${
+                className={`w-full min-h-[44px] flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-lg text-xs font-medium text-left transition-colors ${
                   isSelected
                     ? 'bg-blue-50 text-blue-600 font-semibold'
-                    : 'text-slate-700 hover:bg-slate-50'
+                    : 'text-slate-700 hover:bg-slate-50 active:bg-slate-100'
                 }`}
               >
                 <div className="flex items-center gap-2.5">
@@ -492,7 +492,7 @@ export const AdminDashboardPage: React.FC = () => {
                 refreshData();
                 setMobileMenuOpen(false);
               }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 text-left transition-colors"
+              className="w-full min-h-[44px] flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 active:bg-slate-100 text-left transition-colors"
             >
               <RefreshCw className={`w-4 h-4 text-slate-400 ${loading ? 'animate-spin' : ''}`} />
               <span>Sync Firebase</span>
@@ -504,7 +504,7 @@ export const AdminDashboardPage: React.FC = () => {
                 setPasswordModalOpen(true);
                 setMobileMenuOpen(false);
               }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 text-left transition-colors"
+              className="w-full min-h-[44px] flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 active:bg-slate-100 text-left transition-colors"
             >
               <Key className="w-4 h-4 text-slate-400" />
               <span>Change Password</span>
@@ -513,7 +513,7 @@ export const AdminDashboardPage: React.FC = () => {
             <button
               type="button"
               onClick={() => logout()}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-600 hover:text-rose-600 hover:bg-rose-50 text-left transition-colors"
+              className="w-full min-h-[44px] flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-medium text-slate-600 hover:text-rose-600 hover:bg-rose-50 active:bg-rose-100 text-left transition-colors"
             >
               <LogOut className="w-4 h-4 text-slate-400" />
               <span>Logout</span>
@@ -624,7 +624,7 @@ export const AdminDashboardPage: React.FC = () => {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 p-6 md:p-8 min-w-0 bg-[#F8FAFC] space-y-6">
+      <main className="flex-1 p-3.5 sm:p-6 md:p-8 min-w-0 bg-[#F8FAFC] space-y-6">
         {/* ============================================================== */}
         {/* 1. DASHBOARD OVERVIEW TAB                                      */}
         {/* ============================================================== */}
@@ -1085,7 +1085,7 @@ export const AdminDashboardPage: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => setEditingMaterial(mat)}
-                          className="flex-1 py-1.5 px-2 bg-white text-slate-700 hover:bg-slate-50 rounded-lg text-xs font-medium border border-slate-200 text-center"
+                          className="flex-1 min-h-[40px] inline-flex items-center justify-center py-2 px-2 bg-white text-slate-700 hover:bg-slate-50 active:bg-slate-100 rounded-lg text-xs font-semibold border border-slate-200 text-center"
                         >
                           Edit
                         </button>
@@ -1093,7 +1093,7 @@ export const AdminDashboardPage: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => setReplacingMaterial(mat)}
-                          className="flex-1 py-1.5 px-2 bg-white text-slate-700 hover:bg-slate-50 rounded-lg text-xs font-medium border border-slate-200 text-center"
+                          className="flex-1 min-h-[40px] inline-flex items-center justify-center py-2 px-2 bg-white text-slate-700 hover:bg-slate-50 active:bg-slate-100 rounded-lg text-xs font-semibold border border-slate-200 text-center"
                         >
                           Replace PDF
                         </button>
@@ -1101,7 +1101,8 @@ export const AdminDashboardPage: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleDeleteMaterial(mat)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 bg-white border border-slate-200 hover:bg-rose-50 rounded-lg"
+                          aria-label={`Delete ${mat.title}`}
+                          className="min-h-[40px] min-w-[40px] inline-flex items-center justify-center p-2 text-slate-400 hover:text-rose-600 bg-white border border-slate-200 hover:bg-rose-50 active:bg-rose-100 rounded-lg shrink-0"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>

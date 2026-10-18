@@ -201,8 +201,9 @@ export const Navbar: React.FC = () => {
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 focus:outline-none"
+              className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center p-2.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
               aria-label="Toggle menu"
+              aria-expanded={mobileMenuOpen}
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -218,7 +219,7 @@ export const Navbar: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search notes, assignments, experiments..."
-              className="w-full pl-9 pr-3 py-2 text-sm bg-slate-100 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-800"
+              className="w-full min-h-[42px] pl-9 pr-3 py-2 text-sm bg-slate-100 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-800 placeholder:text-slate-400"
             />
           </form>
         </div>
@@ -230,7 +231,7 @@ export const Navbar: React.FC = () => {
           <Link
             to="/"
             onClick={() => setMobileMenuOpen(false)}
-            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-800 hover:bg-slate-50"
+            className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-800 hover:bg-slate-50 active:bg-slate-100 min-h-[44px]"
           >
             <BookOpen className="w-4 h-4 text-blue-600" />
             <span>Home</span>
@@ -239,7 +240,7 @@ export const Navbar: React.FC = () => {
           <Link
             to="/subjects"
             onClick={() => setMobileMenuOpen(false)}
-            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-800 hover:bg-slate-50"
+            className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-800 hover:bg-slate-50 active:bg-slate-100 min-h-[44px]"
           >
             <Layers className="w-4 h-4 text-blue-600" />
             <span>Subjects</span>
@@ -248,7 +249,7 @@ export const Navbar: React.FC = () => {
           <Link
             to="/materials"
             onClick={() => setMobileMenuOpen(false)}
-            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-800 hover:bg-slate-50"
+            className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-800 hover:bg-slate-50 active:bg-slate-100 min-h-[44px]"
           >
             <FileText className="w-4 h-4 text-blue-600" />
             <span>All Materials</span>
@@ -257,7 +258,7 @@ export const Navbar: React.FC = () => {
           <Link
             to="/category/assignments"
             onClick={() => setMobileMenuOpen(false)}
-            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-800 hover:bg-slate-50"
+            className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-800 hover:bg-slate-50 active:bg-slate-100 min-h-[44px]"
           >
             <FileText className="w-4 h-4 text-emerald-600" />
             <span>Assignments (30)</span>
@@ -266,7 +267,7 @@ export const Navbar: React.FC = () => {
           <Link
             to="/category/experiments"
             onClick={() => setMobileMenuOpen(false)}
-            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-800 hover:bg-slate-50"
+            className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-800 hover:bg-slate-50 active:bg-slate-100 min-h-[44px]"
           >
             <FlaskConical className="w-4 h-4 text-purple-600" />
             <span>Experiments / Practicals (32)</span>
@@ -276,13 +277,13 @@ export const Navbar: React.FC = () => {
             <p className="px-3 text-xs font-semibold uppercase text-slate-400">
               Categories
             </p>
-            <div className="grid grid-cols-2 gap-1 mt-1">
+            <div className="grid grid-cols-2 gap-1.5 mt-1.5">
               {CATEGORIES.map((cat) => (
                 <Link
                   key={cat.id}
                   to={`/category/${cat.id}`}
                   onClick={() => setMobileMenuOpen(false)}
-                  className="px-3 py-1.5 rounded text-xs text-slate-700 hover:bg-slate-100"
+                  className="px-3 py-2 rounded-lg text-xs text-slate-700 hover:bg-slate-100 active:bg-slate-200 min-h-[38px] flex items-center"
                 >
                   {cat.shortName}
                 </Link>
@@ -293,7 +294,7 @@ export const Navbar: React.FC = () => {
           <Link
             to="/about"
             onClick={() => setMobileMenuOpen(false)}
-            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-800 hover:bg-slate-50"
+            className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-800 hover:bg-slate-50 active:bg-slate-100 min-h-[44px]"
           >
             <GraduationCap className="w-4 h-4 text-blue-600" />
             <span>About</span>
@@ -304,7 +305,7 @@ export const Navbar: React.FC = () => {
               <Link
                 to="/admin/dashboard"
                 onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center justify-center gap-2 w-full py-2 bg-emerald-50 text-emerald-800 font-semibold rounded-lg border border-emerald-200 text-sm"
+                className="flex items-center justify-center gap-2 w-full min-h-[44px] py-2 bg-emerald-50 text-emerald-800 font-semibold rounded-lg border border-emerald-200 text-sm active:bg-emerald-100"
               >
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
                 <span>Admin Dashboard</span>
@@ -313,7 +314,7 @@ export const Navbar: React.FC = () => {
               <Link
                 to="/admin/login"
                 onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center justify-center gap-2 w-full py-2 bg-slate-100 text-slate-700 font-medium rounded-lg text-sm"
+                className="flex items-center justify-center gap-2 w-full min-h-[44px] py-2 bg-slate-100 text-slate-700 font-medium rounded-lg text-sm active:bg-slate-200"
               >
                 <ShieldCheck className="w-4 h-4 text-slate-500" />
                 <span>Admin Login</span>

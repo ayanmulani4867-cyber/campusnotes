@@ -87,7 +87,7 @@ export const CategoryPage: React.FC = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-12 space-y-6 sm:space-y-8">
       {/* Back button */}
       <div>
         <Link
@@ -99,8 +99,8 @@ export const CategoryPage: React.FC = () => {
         </Link>
 
         {/* Category Header Banner */}
-        <div className="bg-white rounded-lg border border-slate-200 p-6 sm:p-8">
-          <div className="flex items-center gap-2 mb-3">
+        <div className="bg-white rounded-lg border border-slate-200 p-4 sm:p-8">
+          <div className="flex flex-wrap items-center gap-2 mb-3">
             <span
               className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${currentCategory.badgeColor}`}
             >
@@ -111,11 +111,11 @@ export const CategoryPage: React.FC = () => {
             </span>
           </div>
 
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
+          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-900 break-words">
             {currentCategory.name}
           </h1>
 
-          <p className="text-sm text-slate-600 mt-2 max-w-3xl leading-relaxed">
+          <p className="text-xs sm:text-sm text-slate-600 mt-2 max-w-3xl leading-relaxed break-words">
             {currentCategory.description}
           </p>
         </div>
@@ -131,7 +131,7 @@ export const CategoryPage: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={`Search ${currentCategory.shortName.toLowerCase()}...`}
-            className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-800 placeholder:text-slate-400"
+            className="w-full min-h-[42px] pl-10 pr-4 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-800 placeholder:text-slate-400"
           />
         </div>
 
@@ -140,7 +140,7 @@ export const CategoryPage: React.FC = () => {
           <select
             value={selectedSubjectId}
             onChange={(e) => setSelectedSubjectId(e.target.value)}
-            className="w-full text-xs sm:text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium"
+            className="w-full min-h-[42px] text-xs sm:text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium"
           >
             <option value="">All Subjects</option>
             {subjects.map((s) => (
@@ -154,7 +154,7 @@ export const CategoryPage: React.FC = () => {
 
       {/* Material Grid */}
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
           <MaterialCardSkeleton />
           <MaterialCardSkeleton />
           <MaterialCardSkeleton />
@@ -169,7 +169,7 @@ export const CategoryPage: React.FC = () => {
           actionTo="/materials"
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
           {filteredMaterials.map((m) => {
             const subject = subjects.find((s) => s.id === m.subjectId);
             return <MaterialCard key={m.id} material={m} subject={subject} />;

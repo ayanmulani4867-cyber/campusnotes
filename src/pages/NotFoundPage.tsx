@@ -11,7 +11,7 @@ export const NotFoundPage: React.FC = () => {
       <span className="text-xs font-bold uppercase tracking-widest text-blue-600 mb-2">
         Error 404
       </span>
-      <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900 mb-3">
+      <h1 className="text-2xl sm:text-5xl font-extrabold tracking-tight text-slate-900 mb-3 break-words">
         Page Not Found
       </h1>
       <p className="text-sm sm:text-base text-slate-500 max-w-md mb-8 leading-relaxed">
@@ -21,14 +21,14 @@ export const NotFoundPage: React.FC = () => {
       <div className="flex flex-wrap items-center justify-center gap-3">
         <Link
           to="/"
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-xs sm:text-sm font-semibold rounded-xl hover:bg-blue-700 transition-colors shadow-sm shadow-blue-500/20"
+          className="min-h-[44px] inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-xs sm:text-sm font-semibold rounded-xl hover:bg-blue-700 active:bg-blue-800 transition-colors shadow-sm shadow-blue-500/20"
         >
           <Home className="w-4 h-4" />
           <span>CampusNotes Home</span>
         </Link>
         <Link
           to="/materials"
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-700 text-xs sm:text-sm font-semibold rounded-xl hover:bg-slate-200 transition-colors"
+          className="min-h-[44px] inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-700 text-xs sm:text-sm font-semibold rounded-xl hover:bg-slate-200 active:bg-slate-300 transition-colors"
         >
           <Search className="w-4 h-4" />
           <span>Browse Materials</span>

@@ -9,9 +9,12 @@ import {
   Hash,
   Tag,
   RefreshCw,
+  Share2,
+  Check,
 } from 'lucide-react';
 import { StudyMaterial, Subject, CATEGORIES } from '../../types';
 import { downloadStudyMaterial } from '../../services/firebaseService';
+import { shareMaterial } from '../../utils/shareUtils';
 import { useToast } from '../../context/ToastContext';
 
 interface MaterialCardProps {
@@ -43,6 +46,7 @@ export const MaterialCard: React.FC<MaterialCardProps> = ({
 }) => {
   const toast = useToast();
   const [downloading, setDownloading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const categoryMeta = CATEGORIES.find((c) => c.id === material.category) || {
     id: material.category,
@@ -65,8 +69,19 @@ export const MaterialCard: React.FC<MaterialCardProps> = ({
     }
   };
 
+  const handleShare = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const success = await shareMaterial(material, (title, msg) => {
+      toast.success(title, msg);
+    });
+    if (success) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }
+  };
+
   return (
-    <div className="group bg-white rounded-lg border border-slate-200 p-5 hover:border-slate-300 transition-colors flex flex-col justify-between">
+    <div className="group bg-white rounded-lg border border-slate-200 p-4 sm:p-5 hover:border-slate-300 transition-colors flex flex-col justify-between">
       <div>
         {/* Badges Bar: Category & Academic Year */}
         <div className="flex items-center justify-between gap-2 mb-3">
@@ -85,20 +100,20 @@ export const MaterialCard: React.FC<MaterialCardProps> = ({
           to={`/materials/${material.id}`}
           className="block group-hover:text-blue-600 transition-colors"
         >
-          <h3 className="text-base font-semibold text-slate-900 line-clamp-2 leading-snug">
+          <h3 className="text-base font-semibold text-slate-900 line-clamp-2 leading-snug break-words">
             {material.title}
           </h3>
         </Link>
 
         {/* Subject Name / Code */}
         <div className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-          <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-          <span>{subject ? `${subject.code} — ${subject.name}` : 'CSE Semester 5'}</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0"></span>
+          <span className="truncate">{subject ? `${subject.code} — ${subject.name}` : 'CSE Semester 5'}</span>
         </div>
 
         {/* Description */}
         {material.description && (
-          <p className="mt-2 text-xs text-slate-500 line-clamp-2 leading-relaxed">
+          <p className="mt-2 text-xs text-slate-500 line-clamp-2 leading-relaxed break-words">
             {material.description}
           </p>
         )}
@@ -134,7 +149,7 @@ export const MaterialCard: React.FC<MaterialCardProps> = ({
                 className="inline-flex items-center gap-0.5 text-[10px] text-slate-500 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded"
               >
                 <Tag className="w-2.5 h-2.5 opacity-60" />
-                <span>{tag}</span>
+                <span className="truncate max-w-[120px]">{tag}</span>
               </span>
             ))}
           </div>
@@ -155,27 +170,47 @@ export const MaterialCard: React.FC<MaterialCardProps> = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="grid grid-cols-2 gap-2">
+        <div className="flex items-center gap-2">
           <Link
             to={`/materials/${material.id}`}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors"
+            aria-label={`View PDF for ${material.title}`}
+            className="flex-1 min-h-[42px] inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 active:bg-slate-100 rounded-lg transition-colors"
           >
-            <Eye className="w-3.5 h-3.5 text-slate-500" />
-            <span>View PDF</span>
+            <Eye className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+            <span>View</span>
           </Link>
 
           <button
             type="button"
             onClick={handleDownload}
             disabled={downloading}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            aria-label={`Download ${material.title}`}
+            className="flex-1 min-h-[42px] inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {downloading ? (
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
             ) : (
-              <Download className="w-3.5 h-3.5" />
+              <Download className="w-3.5 h-3.5 shrink-0" />
             )}
-            <span>{downloading ? 'Downloading...' : 'Download'}</span>
+            <span className="truncate">{downloading ? 'Saving...' : 'Download'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleShare}
+            aria-label={`Share ${material.title}`}
+            title={copied ? 'Link Copied!' : 'Share Material'}
+            className={`min-h-[42px] min-w-[42px] px-2.5 py-2 inline-flex items-center justify-center text-xs font-medium rounded-lg border transition-colors shrink-0 ${
+              copied
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                : 'text-slate-700 bg-white border-slate-200 hover:bg-slate-50 active:bg-slate-100'
+            }`}
+          >
+            {copied ? (
+              <Check className="w-4 h-4 text-emerald-600" />
+            ) : (
+              <Share2 className="w-4 h-4 text-slate-600" />
+            )}
           </button>
         </div>
       </div>

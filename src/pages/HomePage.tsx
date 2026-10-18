@@ -78,32 +78,32 @@ export const HomePage: React.FC = () => {
   return (
     <div className="space-y-10 pb-16">
       {/* 1. Simple Hero Section with CampusNotes Branding */}
-      <section className="bg-white border-b border-slate-200 pt-8 pb-10 sm:pt-12 sm:pb-14">
+      <section className="bg-white border-b border-slate-200 pt-7 pb-8 sm:pt-12 sm:pb-14">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 text-center">
-          <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900">
+          <h1 className="text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-slate-900 break-words">
             CampusNotes
           </h1>
-          <p className="mt-3 text-base sm:text-lg text-slate-600 max-w-2xl mx-auto">
+          <p className="mt-2.5 text-sm sm:text-base md:text-lg text-slate-600 max-w-2xl mx-auto">
             Simple, clean study materials, assignments, lab practicals, and previous year question papers for CSE Semester 5.
           </p>
 
           {/* Clear Search Bar */}
           <form
             onSubmit={handleSearchSubmit}
-            className="mt-6 max-w-xl mx-auto relative"
+            className="mt-5 max-w-xl mx-auto relative"
           >
             <div className="relative flex items-center bg-slate-50 border border-slate-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-600 focus-within:border-blue-600 focus-within:bg-white transition-all shadow-sm">
-              <Search className="w-5 h-5 text-slate-400 ml-3.5 flex-shrink-0" />
+              <Search className="w-4 sm:w-5 h-4 sm:h-5 text-slate-400 ml-3 flex-shrink-0" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by topic, course code (e.g. 23CS3501), or title..."
-                className="w-full py-3 pl-2.5 pr-24 text-sm sm:text-base text-slate-900 placeholder:text-slate-400 focus:outline-none bg-transparent"
+                placeholder="Search topic or course code (e.g. 23CS3501)..."
+                className="w-full min-h-[44px] py-2.5 pl-2.5 pr-20 text-xs sm:text-sm md:text-base text-slate-900 placeholder:text-slate-400 focus:outline-none bg-transparent"
               />
               <button
                 type="submit"
-                className="absolute right-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold rounded-md transition-colors"
+                className="absolute right-1.5 min-h-[36px] px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs sm:text-sm font-semibold rounded-md transition-colors"
               >
                 Search
               </button>
@@ -112,13 +112,13 @@ export const HomePage: React.FC = () => {
 
           {/* Quick search tags */}
           <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5 text-xs text-slate-500">
-            <span>Quick:</span>
+            <span className="font-medium">Quick:</span>
             {['23CS3501', '23CS3502', '23CS3503', 'Java Lab', 'DAA Lab', 'ADB Lab'].map((q) => (
               <button
                 key={q}
                 type="button"
                 onClick={() => navigate(`/materials?search=${encodeURIComponent(q)}`)}
-                className="px-2 py-0.5 rounded bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-600 transition-colors"
+                className="min-h-[30px] px-2 py-0.5 rounded bg-slate-100 hover:bg-blue-50 hover:text-blue-700 active:bg-blue-100 text-slate-600 transition-colors inline-flex items-center"
               >
                 {q}
               </button>
@@ -129,8 +129,8 @@ export const HomePage: React.FC = () => {
 
       {/* 2. Straightforward Category Filters */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-slate-900">Filter by Category</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h2 className="text-base sm:text-lg font-bold text-slate-900">Filter by Category</h2>
           <Link
             to="/materials"
             className="text-xs font-semibold text-blue-600 hover:text-blue-800"
@@ -140,14 +140,14 @@ export const HomePage: React.FC = () => {
         </div>
 
         {/* Straightforward Category Pills */}
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5 sm:gap-2">
           <button
             type="button"
             onClick={() => setSelectedCategory('all')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+            className={`min-h-[38px] px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-medium border transition-colors inline-flex items-center ${
               selectedCategory === 'all'
                 ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 active:bg-slate-100'
             }`}
           >
             All Categories
@@ -159,10 +159,10 @@ export const HomePage: React.FC = () => {
                 key={cat.id}
                 type="button"
                 onClick={() => setSelectedCategory(isSelected ? 'all' : cat.id)}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                className={`min-h-[38px] px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-medium border transition-colors inline-flex items-center ${
                   isSelected
                     ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 active:bg-slate-100'
                 }`}
               >
                 {cat.name}
@@ -174,16 +174,16 @@ export const HomePage: React.FC = () => {
 
       {/* 3. Subjects Grid (Exact 9 Semester V Subjects) */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
           <div>
-            <h2 className="text-xl font-bold text-slate-900">Semester 5 Subjects</h2>
+            <h2 className="text-lg sm:text-xl font-bold text-slate-900">Semester 5 Subjects</h2>
             <p className="text-xs text-slate-500 mt-0.5">
               Select any of the 9 official curriculum subjects to view organized materials
             </p>
           </div>
           <Link
             to="/subjects"
-            className="text-xs font-semibold text-blue-600 hover:text-blue-800"
+            className="text-xs font-semibold text-blue-600 hover:text-blue-800 self-start sm:self-auto"
           >
             View Subject List &rarr;
           </Link>
@@ -201,7 +201,7 @@ export const HomePage: React.FC = () => {
               <Link
                 key={sub.id}
                 to={`/subjects/${sub.id}`}
-                className="bg-white border border-slate-200 rounded-lg p-5 hover:border-slate-300 transition-colors flex flex-col justify-between"
+                className="bg-white border border-slate-200 rounded-lg p-4 sm:p-5 hover:border-slate-300 transition-colors flex flex-col justify-between"
               >
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-2">
@@ -220,7 +220,7 @@ export const HomePage: React.FC = () => {
                   )}
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-medium text-blue-600">
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-medium text-blue-600 min-h-[36px]">
                   <span>Open Subject</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </div>
@@ -232,9 +232,9 @@ export const HomePage: React.FC = () => {
 
       {/* 4. Published Materials Section */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
           <div>
-            <h2 className="text-xl font-bold text-slate-900">
+            <h2 className="text-lg sm:text-xl font-bold text-slate-900">
               {selectedCategory === 'all'
                 ? 'Recent Study Materials'
                 : CATEGORIES.find((c) => c.id === selectedCategory)?.name || 'Materials'}
@@ -245,7 +245,7 @@ export const HomePage: React.FC = () => {
           </div>
           <Link
             to={selectedCategory === 'all' ? '/materials' : `/category/${selectedCategory}`}
-            className="text-xs font-semibold text-blue-600 hover:text-blue-800"
+            className="text-xs font-semibold text-blue-600 hover:text-blue-800 self-start sm:self-auto"
           >
             View All ({materials.length}) &rarr;
           </Link>

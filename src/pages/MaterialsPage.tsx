@@ -152,17 +152,17 @@ export const MaterialsPage: React.FC = () => {
   }, [materials, subjects, filters]);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-12 space-y-6 sm:space-y-8">
       {/* Header */}
       <div>
         <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-600 mb-1">
           <FileText className="w-4 h-4" />
           <span>Academic Resource Directory</span>
         </div>
-        <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
+        <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-900 break-words">
           All Study Materials
         </h1>
-        <p className="text-sm text-slate-500 mt-1 max-w-2xl">
+        <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl">
           Browse, filter, and download verified notes, assignment solutions, laboratory practicals, and previous year examination papers for CSE Semester 5.
         </p>
       </div>
@@ -178,7 +178,7 @@ export const MaterialsPage: React.FC = () => {
 
       {/* Results Grid */}
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
           <MaterialCardSkeleton />
           <MaterialCardSkeleton />
           <MaterialCardSkeleton />
@@ -197,7 +197,7 @@ export const MaterialsPage: React.FC = () => {
           onActionClick={handleResetFilters}
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
           {filteredMaterials.map((material) => {
             const subject = subjects.find((s) => s.id === material.subjectId);
             return <MaterialCard key={material.id} material={material} subject={subject} />;

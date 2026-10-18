@@ -25,6 +25,7 @@ import { PdfViewer } from '../components/materials/PdfViewer';
 import { MaterialCard, formatFileSize, formatDate } from '../components/materials/MaterialCard';
 import { EmptyState } from '../components/common/EmptyState';
 import { useToast } from '../context/ToastContext';
+import { shareMaterial } from '../utils/shareUtils';
 
 export const MaterialDetailPage: React.FC = () => {
   const { materialId } = useParams<{ materialId: string }>();
@@ -67,11 +68,15 @@ export const MaterialDetailPage: React.FC = () => {
     loadData();
   }, [materialId]);
 
-  const handleShare = () => {
-    navigator.clipboard.writeText(window.location.href);
-    setCopied(true);
-    toast.success('Link Copied', 'Material URL copied to clipboard.');
-    setTimeout(() => setCopied(false), 3000);
+  const handleShare = async () => {
+    if (!material) return;
+    const success = await shareMaterial(material, (title, msg) => {
+      toast.success(title, msg);
+    });
+    if (success) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }
   };
 
   const handleDownload = async () => {
@@ -132,10 +137,10 @@ export const MaterialDetailPage: React.FC = () => {
 
         {/* Material Header Box */}
         {/* Material Detail Banner */}
-        <div className="bg-white rounded-lg border border-slate-200 p-6 sm:p-8">
-          <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100">
+        <div className="bg-white rounded-lg border border-slate-200 p-4 sm:p-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
             {/* Badges */}
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <Link
                 to={`/category/${material.category}`}
                 className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border hover:opacity-90 transition-opacity ${categoryMeta.badgeColor}`}
@@ -174,21 +179,26 @@ export const MaterialDetailPage: React.FC = () => {
             </div>
 
             {/* Quick Actions */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               <button
                 type="button"
                 onClick={handleShare}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors"
-                title="Copy shareable link"
+                aria-label={`Share ${material.title}`}
+                className={`flex-1 sm:flex-none min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg border transition-colors ${
+                  copied
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                    : 'text-slate-700 bg-white border-slate-200 hover:bg-slate-50 active:bg-slate-100'
+                }`}
+                title="Share or copy link"
               >
                 {copied ? (
                   <>
-                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <Check className="w-4 h-4 text-emerald-600" />
                     <span>Copied!</span>
                   </>
                 ) : (
                   <>
-                    <Share2 className="w-3.5 h-3.5" />
+                    <Share2 className="w-4 h-4 text-slate-600" />
                     <span>Share</span>
                   </>
                 )}
@@ -198,16 +208,17 @@ export const MaterialDetailPage: React.FC = () => {
                 type="button"
                 onClick={handleDownload}
                 disabled={downloading}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-60"
+                aria-label={`Download ${material.title}`}
+                className="flex-1 sm:flex-none min-h-[44px] inline-flex items-center justify-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {downloading ? (
                   <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <RefreshCw className="w-4 h-4 animate-spin" />
                     <span>Preparing PDF...</span>
                   </>
                 ) : (
                   <>
-                    <Download className="w-3.5 h-3.5" />
+                    <Download className="w-4 h-4" />
                     <span>Download PDF</span>
                   </>
                 )}
@@ -217,7 +228,7 @@ export const MaterialDetailPage: React.FC = () => {
 
           {/* Title & Description */}
           <div className="mt-5 space-y-3">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 leading-tight">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-slate-900 leading-tight break-words">
               {material.title}
             </h1>
 
