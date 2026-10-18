@@ -2,8 +2,12 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     
+    // Strict administrator verification:
+    // Requires authenticated session from Firebase Auth matching canonical admin email, verified UID, or token claim
     function isAuthorizedAdmin() {
       return request.auth != null && (
+        request.auth.token.email == 'admin@campusnotes.internal' ||
+        request.auth.uid == 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' ||
         request.auth.token.admin == true ||
         request.auth.token.role == 'admin' ||
         request.auth.token.email.matches('.*@campusnotes[.]internal')
@@ -11,22 +15,29 @@ service firebase.storage {
     }
 
     // Study Materials Storage (CSE Semester 5)
+    // Structure: materials/{subjectId}/{materialId}/{fileName}
     match /materials/{subjectId}/{materialId}/{fileName} {
-      // Public visitors may only read published study materials when not in maintenance.
-      // Authenticated administrators can read all files (including drafts and maintenance).
-      allow read: if isAuthorizedAdmin() || (resource.metadata.published == 'true' && resource.metadata.maintenance != 'true');
+      // 1. Read access:
+      // - Authenticated administrators can read all materials (published or draft, live or maintenance)
+      // - Public visitors can only read published files when maintenance mode is not active
+      allow read: if isAuthorizedAdmin() || (
+        resource.metadata.published == 'true' &&
+        resource.metadata.maintenance != 'true'
+      );
 
-      // Only authorized administrators may upload or overwrite
-      // Strict constraints: Content-Type must be PDF, max file size 25MB (26214400 bytes)
+      // 2. Upload / Replace access:
+      // - Only authorized administrators may write
+      // - Strict constraints: Content-Type MUST be application/pdf, max file size <= 25 MB
       allow write: if isAuthorizedAdmin()
                    && request.resource.size <= 25 * 1024 * 1024
                    && request.resource.contentType == 'application/pdf';
 
-      // Only authorized administrators may delete
+      // 3. Delete access:
+      // - Only authorized administrators may delete orphaned/retired files
       allow delete: if isAuthorizedAdmin();
     }
 
-    // Default deny for all other locations
+    // Strict default deny for all other locations
     match /{allPaths=**} {
       allow read, write: if false;
     }

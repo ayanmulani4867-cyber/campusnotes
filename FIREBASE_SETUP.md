@@ -131,29 +131,35 @@ The frontend automatically resolves `admin` to `admin@campusnotes.internal` and 
   "rules": {
     "admins": {
       ".read": "auth != null",
-      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)"
+      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)"
     },
     "settings": {
       ".read": true,
-      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)"
+      "maintenanceMode": {
+        ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
+        ".validate": "newData.isBoolean()"
+      },
+      "$other": {
+        ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)"
+      }
     },
     "subjects": {
-      ".read": "root.child('settings').child('maintenanceMode').val() !== true || (auth != null && (auth.token.email === 'admin@campusnotes.internal' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true))",
-      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
+      ".read": "root.child('settings').child('maintenanceMode').val() !== true || (auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true))",
+      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
       ".indexOn": ["code", "active"]
     },
     "categories": {
       ".read": true,
-      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)"
+      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)"
     },
     "publicMaterials": {
       ".read": "root.child('settings').child('maintenanceMode').val() !== true",
-      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
+      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
       ".indexOn": ["subjectId", "category", "academicYear", "createdAt"]
     },
     "materials": {
-      ".read": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
-      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
+      ".read": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
+      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
       ".indexOn": ["subjectId", "category", "academicYear", "createdAt"]
     }
   }
@@ -165,40 +171,61 @@ The frontend automatically resolves `admin` to `admin@campusnotes.internal` and 
 - Firebase Realtime Database rules do not filter queries automatically.
 - Materials are securely partitioned: public visitors query `/publicMaterials` (published only).
 - Drafts and unpublished materials remain in `/materials`, where unauthenticated reading is strictly denied (`auth != null && ...`).
+- Global `.read` and `.write` are strictly omitted (never set to true).
 
 ### Apply Cloud Storage Rules
 1. In Firebase Console, go to **Build -> Storage -> Rules** tab.
-2. Copy the entire contents of `storage.rules`:
+2. If Cloud Storage has not been created yet, click **Get started** in the Storage tab, choose your region, and create the default bucket (`campusnotes-e62cf.firebasestorage.app`).
+3. Copy the entire contents of `storage.rules`:
 
 ```javascript
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     
-    // Study Materials Storage (CSE Semester 5)
-    match /materials/{subjectId}/{materialId}/{fileName} {
-      // Public visitors may only read published study materials.
-      // Authenticated administrators can read all files (including drafts).
-      allow read: if request.auth != null || resource.metadata.published == 'true';
+    // Strict administrator verification:
+    // Requires authenticated session from Firebase Auth matching canonical admin email, verified UID, or token claim
+    function isAuthorizedAdmin() {
+      return request.auth != null && (
+        request.auth.token.email == 'admin@campusnotes.internal' ||
+        request.auth.uid == 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' ||
+        request.auth.token.admin == true ||
+        request.auth.token.role == 'admin' ||
+        request.auth.token.email.matches('.*@campusnotes[.]internal')
+      );
+    }
 
-      // Only authenticated administrators may upload or overwrite
-      // Strict constraints: Content-Type must be PDF, max file size 25MB (26214400 bytes)
-      allow write: if request.auth != null
+    // Study Materials Storage (CSE Semester 5)
+    // Structure: materials/{subjectId}/{materialId}/{fileName}
+    match /materials/{subjectId}/{materialId}/{fileName} {
+      // 1. Read access:
+      // - Authenticated administrators can read all materials (published or draft, live or maintenance)
+      // - Public visitors can only read published files when maintenance mode is not active
+      allow read: if isAuthorizedAdmin() || (
+        resource.metadata.published == 'true' &&
+        resource.metadata.maintenance != 'true'
+      );
+
+      // 2. Upload / Replace access:
+      // - Only authorized administrators may write
+      // - Strict constraints: Content-Type MUST be application/pdf, max file size <= 25 MB
+      allow write: if isAuthorizedAdmin()
                    && request.resource.size <= 25 * 1024 * 1024
                    && request.resource.contentType == 'application/pdf';
 
-      // Only administrators may delete
-      allow delete: if request.auth != null;
+      // 3. Delete access:
+      // - Only authorized administrators may delete orphaned/retired files
+      allow delete: if isAuthorizedAdmin();
     }
 
-    // Default deny for all other locations
+    // Strict default deny for all other locations
     match /{allPaths=**} {
       allow read, write: if false;
     }
   }
 }
 ```
-3. Click **Publish**.
+4. Click **Publish**.
 
 **Why this Storage rule is secure:**
 - Only authenticated administrators can upload or delete.

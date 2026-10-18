@@ -365,6 +365,21 @@ export function uploadPdfFile(
       },
     });
 
+    // 45-second timeout guard to prevent UI from staying stuck indefinitely
+    // if the Storage bucket hasn't been initialized or network is blocked
+    const uploadTimeout = setTimeout(() => {
+      try {
+        uploadTask.cancel();
+      } catch {
+        // Ignore cancel errors
+      }
+      reject(
+        new Error(
+          'Upload timed out after 45 seconds. Please ensure Firebase Cloud Storage is enabled in Firebase Console (Storage -> Get Started) and rules are published.'
+        )
+      );
+    }, 45000);
+
     uploadTask.on(
       'state_changed',
       (snapshot: { bytesTransferred: number; totalBytes: number }) => {
@@ -374,9 +389,30 @@ export function uploadPdfFile(
         }
       },
       (error: unknown) => {
-        reject(error);
+        clearTimeout(uploadTimeout);
+        const errObj = error as { code?: string; message?: string };
+        const code = errObj?.code || '';
+
+        if (code === 'storage/unauthorized') {
+          reject(
+            new Error(
+              'Permission Denied: Firebase Storage rules rejected this upload. Please apply storage.rules in Firebase Console -> Storage -> Rules.'
+            )
+          );
+        } else if (code === 'storage/bucket-not-found' || code === 'storage/project-not-found') {
+          reject(
+            new Error(
+              'Storage Bucket Not Found: Cloud Storage has not been created yet. Open Firebase Console -> Storage and click "Get started".'
+            )
+          );
+        } else if (code === 'storage/canceled') {
+          reject(new Error('Upload was canceled.'));
+        } else {
+          reject(new Error(errObj?.message || 'Failed to upload PDF file to Firebase Cloud Storage.'));
+        }
       },
       async () => {
+        clearTimeout(uploadTimeout);
         try {
           const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
           resolve({
