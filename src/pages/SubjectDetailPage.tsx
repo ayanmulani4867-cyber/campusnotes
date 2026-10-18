@@ -155,7 +155,7 @@ export const SubjectDetailPage: React.FC = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-12 space-y-4 sm:space-y-6 lg:space-y-8">
+    <div className="w-full max-w-7xl mx-auto min-w-0 px-3.5 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-12 space-y-4 sm:space-y-6 lg:space-y-8 box-border">
       {/* Back Link */}
       <div>
         <Link
@@ -168,21 +168,21 @@ export const SubjectDetailPage: React.FC = () => {
 
         {/* Subject Header Banner */}
         {subjectLoading && !subject ? (
-          <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 p-4 sm:p-6 lg:p-8 animate-pulse space-y-3 shadow-sm">
+          <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 p-4 sm:p-6 lg:p-8 animate-pulse space-y-3 shadow-sm w-full max-w-full min-w-0 box-border">
             <div className="h-5 bg-slate-200 rounded w-28"></div>
             <div className="h-7 sm:h-9 bg-slate-200 rounded w-3/4"></div>
             <div className="h-4 bg-slate-200 rounded w-1/2"></div>
           </div>
         ) : (
-          <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 p-4 sm:p-6 lg:p-8 shadow-sm">
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-2.5 sm:mb-3">
-              <span className="font-mono text-xs sm:text-sm font-bold px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
+          <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 p-4 sm:p-6 lg:p-8 shadow-sm w-full max-w-full min-w-0 box-border">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-2.5 sm:mb-3 min-w-0">
+              <span className="font-mono text-xs sm:text-sm font-bold px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
                 {subject?.code}
               </span>
-              <span className="text-[11px] sm:text-xs font-medium text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-md border border-slate-200">
+              <span className="text-[11px] sm:text-xs font-medium text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-md border border-slate-200 shrink-0">
                 CSE Semester 5
               </span>
-              <span className="text-[11px] sm:text-xs font-semibold text-slate-700 bg-slate-50 px-2.5 py-0.5 rounded-md border border-slate-200">
+              <span className="text-[11px] sm:text-xs font-semibold text-slate-700 bg-slate-50 px-2.5 py-0.5 rounded-md border border-slate-200 shrink-0">
                 {materials.length} Published {materials.length === 1 ? 'Resource' : 'Resources'}
               </span>
             </div>
@@ -200,9 +200,9 @@ export const SubjectDetailPage: React.FC = () => {
       </div>
 
       {/* Category Tabs & Quick Search */}
-      <div className="space-y-3">
+      <div className="space-y-3 w-full max-w-full min-w-0">
         {/* Mobile Quick Category Selector Dropdown (visible on narrow screens) */}
-        <div className="sm:hidden">
+        <div className="sm:hidden w-full min-w-0">
           <label htmlFor="mobile-cat-select" className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1 px-1">
             Browse Category
           </label>
@@ -210,7 +210,7 @@ export const SubjectDetailPage: React.FC = () => {
             id="mobile-cat-select"
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="w-full min-h-[44px] px-3.5 py-2.5 text-xs font-semibold bg-white border border-slate-200 rounded-xl text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+            className="w-full min-h-[44px] px-3.5 py-2.5 text-xs font-semibold bg-white border border-slate-200 rounded-xl text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-600 box-border"
           >
             <option value="">All Resources ({materials.length})</option>
             {CATEGORIES.map((cat) => {
@@ -224,56 +224,58 @@ export const SubjectDetailPage: React.FC = () => {
           </select>
         </div>
 
-        {/* Edge-to-edge Horizontal Category Pills */}
-        <div className="-mx-3 px-3 sm:mx-0 sm:px-0 flex items-center gap-1.5 overflow-x-auto pb-1.5 no-scrollbar scroll-smooth touch-pan-x">
-          <button
-            type="button"
-            onClick={() => setSelectedCategory('')}
-            className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 active:scale-95 ${
-              !selectedCategory
-                ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
-                : 'bg-white text-slate-700 hover:bg-slate-50 active:bg-slate-100 border border-slate-200 shadow-sm'
-            }`}
-          >
-            All Resources ({materials.length})
-          </button>
-          {CATEGORIES.map((cat) => {
-            const count = materials.filter((m) => m.category === cat.id && m.published).length;
-            const isSelected = selectedCategory === cat.id;
+        {/* Strictly Contained Horizontal Category Pills */}
+        <div className="w-full max-w-full min-w-0 overflow-x-auto pb-1.5 no-scrollbar scroll-smooth touch-pan-x">
+          <div className="inline-flex items-center gap-1.5 min-w-max">
+            <button
+              type="button"
+              onClick={() => setSelectedCategory('')}
+              className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 active:scale-95 ${
+                !selectedCategory
+                  ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
+                  : 'bg-white text-slate-700 hover:bg-slate-50 active:bg-slate-100 border border-slate-200 shadow-sm'
+              }`}
+            >
+              All Resources ({materials.length})
+            </button>
+            {CATEGORIES.map((cat) => {
+              const count = materials.filter((m) => m.category === cat.id && m.published).length;
+              const isSelected = selectedCategory === cat.id;
 
-            return (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => setSelectedCategory(isSelected ? '' : cat.id)}
-                className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 shrink-0 active:scale-95 ${
-                  isSelected
-                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
-                    : 'bg-white text-slate-700 hover:bg-slate-50 active:bg-slate-100 border border-slate-200 shadow-sm'
-                }`}
-              >
-                <span>{cat.shortName}</span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                    isSelected ? 'bg-blue-700 text-blue-100' : 'bg-slate-100 text-slate-600'
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setSelectedCategory(isSelected ? '' : cat.id)}
+                  className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 shrink-0 active:scale-95 ${
+                    isSelected
+                      ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
+                      : 'bg-white text-slate-700 hover:bg-slate-50 active:bg-slate-100 border border-slate-200 shadow-sm'
                   }`}
                 >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
+                  <span>{cat.shortName}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      isSelected ? 'bg-blue-700 text-blue-100' : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Search within subject */}
-        <div className="relative max-w-md w-full">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+        <div className="relative max-w-md w-full min-w-0">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={`Search within ${subject?.code || 'this subject'}...`}
-            className="w-full min-h-[44px] pl-10 pr-10 py-2.5 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-800 placeholder:text-slate-400 shadow-sm transition-all"
+            className="w-full min-h-[44px] pl-10 pr-10 py-2.5 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-800 placeholder:text-slate-400 shadow-sm transition-all box-border"
           />
           {searchQuery && (
             <button
@@ -289,8 +291,8 @@ export const SubjectDetailPage: React.FC = () => {
 
         {/* Active Filter Summary Bar */}
         {(selectedCategory || searchQuery) && (
-          <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-blue-50/80 border border-blue-100 rounded-xl text-xs text-blue-900">
-            <span className="font-medium">
+          <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-blue-50/80 border border-blue-100 rounded-xl text-xs text-blue-900 w-full min-w-0 box-border">
+            <span className="font-medium break-words">
               Showing {filteredMaterials.length} of {materials.length} resources
               {activeCategoryMeta && ` under "${activeCategoryMeta.name}"`}
               {searchQuery && ` matching "${searchQuery}"`}
@@ -312,7 +314,7 @@ export const SubjectDetailPage: React.FC = () => {
 
       {/* Materials List */}
       {materialsLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 sm:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 sm:gap-6 w-full max-w-full min-w-0">
           <MaterialCardSkeleton />
           <MaterialCardSkeleton />
           <MaterialCardSkeleton />
@@ -332,7 +334,7 @@ export const SubjectDetailPage: React.FC = () => {
           actionTo={!selectedCategory ? '/subjects' : undefined}
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 sm:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 sm:gap-6 w-full max-w-full min-w-0">
           {filteredMaterials.map((m) => (
             <MaterialCard key={m.id} material={m} subject={subject || undefined} />
           ))}

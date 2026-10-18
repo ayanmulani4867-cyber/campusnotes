@@ -50,8 +50,8 @@ export const MaterialFilter: React.FC<MaterialFilterProps> = ({
       </div>
 
       {/* Category Pills (horizontal scrollable on mobile) */}
-      <div>
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 no-scrollbar -mx-1 px-1">
+      <div className="w-full max-w-full min-w-0 overflow-x-auto pb-1.5 no-scrollbar touch-pan-x">
+        <div className="inline-flex items-center gap-1.5 min-w-max">
           <button
             type="button"
             onClick={() => onFilterChange({ category: '' })}

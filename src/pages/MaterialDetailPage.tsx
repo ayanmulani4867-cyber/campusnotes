@@ -124,7 +124,7 @@ export const MaterialDetailPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-12 space-y-6 sm:space-y-8">
+    <div className="w-full max-w-7xl mx-auto min-w-0 px-3.5 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-12 space-y-6 sm:space-y-8 box-border">
       {/* Navigation Breadcrumb */}
       <div>
         <Link
@@ -136,10 +136,10 @@ export const MaterialDetailPage: React.FC = () => {
         </Link>
 
         {/* Material Detail Banner */}
-        <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 p-4 sm:p-6 lg:p-8 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+        <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 p-4 sm:p-6 lg:p-8 shadow-sm w-full max-w-full min-w-0 box-border">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 min-w-0 w-full">
             {/* Badges */}
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0">
               <Link
                 to={`/category/${material.category}`}
                 className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border hover:opacity-90 transition-opacity ${categoryMeta.badgeColor}`}
@@ -178,7 +178,7 @@ export const MaterialDetailPage: React.FC = () => {
             </div>
 
             {/* Quick Actions */}
-            <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="flex items-center gap-2 w-full sm:w-auto min-w-0">
               <button
                 type="button"
                 onClick={handleShare}

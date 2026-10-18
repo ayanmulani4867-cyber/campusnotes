@@ -103,7 +103,7 @@ export const CategoryPage: React.FC = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-12 space-y-6 sm:space-y-8">
+    <div className="w-full max-w-7xl mx-auto min-w-0 px-3.5 sm:px-6 lg:px-8 py-6 sm:py-12 space-y-6 sm:space-y-8 box-border">
       {/* Back button */}
       <div>
         <Link
@@ -115,7 +115,7 @@ export const CategoryPage: React.FC = () => {
         </Link>
 
         {/* Category Header Banner */}
-        <div className="bg-white rounded-lg border border-slate-200 p-4 sm:p-8">
+        <div className="bg-white rounded-lg border border-slate-200 p-4 sm:p-8 w-full max-w-full min-w-0 box-border">
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <span
               className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${currentCategory.badgeColor}`}
@@ -170,7 +170,7 @@ export const CategoryPage: React.FC = () => {
 
       {/* Material Grid */}
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 w-full max-w-full min-w-0">
           <MaterialCardSkeleton />
           <MaterialCardSkeleton />
           <MaterialCardSkeleton />
@@ -185,7 +185,7 @@ export const CategoryPage: React.FC = () => {
           actionTo="/materials"
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 w-full max-w-full min-w-0">
           {filteredMaterials.map((m) => {
             const subject = subjects.find((s) => s.id === m.subjectId);
             return <MaterialCard key={m.id} material={m} subject={subject} />;

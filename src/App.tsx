@@ -55,10 +55,10 @@ const AppContent: React.FC = () => {
   const isAdminDashboard = location.pathname.startsWith('/admin/dashboard');
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans selection:bg-blue-600 selection:text-white">
+    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans selection:bg-blue-600 selection:text-white w-full max-w-full">
       <ScrollToTop />
       <Navbar />
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col w-full max-w-full min-w-0">
         <Suspense fallback={<PageLoader />}>
           <Routes>
             {/* Public Routes */}

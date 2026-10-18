@@ -128,7 +128,7 @@ export const HomePage: React.FC = () => {
       </section>
 
       {/* 2. Straightforward Category Filters */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="w-full max-w-7xl mx-auto min-w-0 px-3.5 sm:px-6 lg:px-8 box-border">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <h2 className="text-base sm:text-lg font-bold text-slate-900">Filter by Category</h2>
           <Link
@@ -173,7 +173,7 @@ export const HomePage: React.FC = () => {
       </section>
 
       {/* 3. Subjects Grid (Exact 9 Semester V Subjects) */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="w-full max-w-7xl mx-auto min-w-0 px-3.5 sm:px-6 lg:px-8 box-border">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
           <div>
             <h2 className="text-lg sm:text-xl font-bold text-slate-900">Semester 5 Subjects</h2>
@@ -231,7 +231,7 @@ export const HomePage: React.FC = () => {
       </section>
 
       {/* 4. Published Materials Section */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="w-full max-w-7xl mx-auto min-w-0 px-3.5 sm:px-6 lg:px-8 box-border">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
           <div>
             <h2 className="text-lg sm:text-xl font-bold text-slate-900">
