@@ -1,130 +1,35 @@
-# Firebase Integration & Live Testing Guide — CampusNotes (CSE Semester 5)
+# Firebase Integration & Setup Guide — CampusNotes (RTDB-Only Storage)
 
-This guide provides the exact steps to connect CampusNotes to your live Firebase project (`campusnotes-e62cf`), configure Authentication, Realtime Database, and Cloud Storage, provision the first administrator, apply security rules, and test all features before deploying to Vercel.
+This guide provides the exact configuration and setup instructions for **CampusNotes** (`campusnotes-e62cf`).
+CampusNotes uses **Firebase Realtime Database as the sole persistent file-storage and metadata system** (no Cloud Storage, no Blaze plan required).
 
 ---
 
 ## 1. Project Configuration Summary
 
-| Service | Target Configuration |
+| Setting | Value |
 | :--- | :--- |
 | **Firebase Project ID** | `campusnotes-e62cf` |
 | **Realtime Database URL** | `https://campusnotes-e62cf-default-rtdb.firebaseio.com/` |
-| **Default Storage Bucket** | `campusnotes-e62cf.firebasestorage.app` |
 | **Auth Domain** | `campusnotes-e62cf.firebaseapp.com` |
-| **Academic Department** | Department of Computer Science & Engineering (CSE) |
+| **Persistent File Storage** | **Firebase Realtime Database ONLY** (`/file_blobs/`) |
+| **Max PDF File Size** | **6 MB** (raw PDF expands to ~8 MB Base64, safe under RTDB 10 MB limit) |
+| **Academic Department** | Computer Science & Engineering (CSE) |
 | **Curriculum Scope** | **Semester 5 ONLY** (Exact 9 subjects) |
-| **Initial Dev Login** | Username: `admin` / Password: `admin` |
 | **Canonical Admin Email** | `admin@campusnotes.internal` |
+| **Initial Login Alias** | Username: `admin` / Password: `admin` (or `CampusAdmin@2026`) |
 
 ---
 
-## 2. Obtain Your Real Firebase Web App Configuration
+## 2. Realtime Database Security Rules (`database.rules.json`)
 
-Firebase Web App credentials (`apiKey`, `appId`, `messagingSenderId`) must come from your Firebase Console. Never commit or invent credentials.
+To fix `PERMISSION_DENIED` and allow public access to published study materials and file blobs while securing administrative actions, copy the following rules into Firebase Console:
 
-1. Open the [Firebase Console](https://console.firebase.google.com/).
-2. Select your project: **`campusnotes-e62cf`**.
-3. In the left navigation, click the **Settings gear icon (⚙️) -> Project settings**.
-4. In the **General** tab, scroll down to the **Your apps** section.
-5. If you haven't registered a Web App yet:
-   - Click the **Web (`</>`)** icon.
-   - Enter App nickname: `CampusNotes Web`.
-   - Leave "Also set up Firebase Hosting" unchecked for now.
-   - Click **Register app**.
-6. Under **Firebase SDK snippet**, select **Config**.
-7. Copy the configuration object values into your local `.env` file located at:
-   `campusnotes/.env`
-
-```env
-# =============================================================================
-# CampusNotes — CSE Semester 5 Study Hub (Local Development Environment)
-# Connected to Real Firebase Project: campusnotes-e62cf
-# =============================================================================
-
-VITE_FIREBASE_API_KEY=AIzaSy...Your_Real_Web_API_Key
-VITE_FIREBASE_AUTH_DOMAIN=campusnotes-e62cf.firebaseapp.com
-VITE_FIREBASE_DATABASE_URL=https://campusnotes-e62cf-default-rtdb.firebaseio.com/
-VITE_FIREBASE_PROJECT_ID=campusnotes-e62cf
-VITE_FIREBASE_STORAGE_BUCKET=campusnotes-e62cf.firebasestorage.app
-VITE_FIREBASE_MESSAGING_SENDER_ID=Your_Messaging_Sender_Id
-VITE_FIREBASE_APP_ID=1:Your_App_Id:web:...
-```
-
-> **Note**: `.env` is included in `.gitignore` and is strictly excluded from version control.
-
----
-
-## 3. Enable Email/Password Authentication in Firebase Console
-
-CampusNotes authenticates administrators through Firebase Authentication, mapping the username `admin` to `admin@campusnotes.internal`.
-
-1. In the Firebase Console left menu, navigate to **Build -> Authentication**.
-2. If Authentication is not yet enabled, click **Get started**.
-3. Click on the **Sign-in method** tab.
-4. Under **Sign-in providers**, click **Email/Password**.
-5. Toggle **Enable** to ON (leave "Email link (passwordless sign-in)" disabled).
-6. Click **Save**.
-
----
-
-## 4. Configure Firebase Cloud Storage
-
-CampusNotes stores study material PDFs up to 25 MB in Firebase Cloud Storage.
-
-1. In the Firebase Console left menu, navigate to **Build -> Storage**.
-2. If Storage is not yet enabled:
-   - Click **Get started**.
-   - Choose a storage bucket location (e.g. `asia-south1` or `us-central1`).
-   - Select **Start in test mode** temporarily or apply the custom security rules provided below.
-   - Click **Done**.
-3. Verify the bucket name matches `campusnotes-e62cf.firebasestorage.app`.
-   - If your bucket has the legacy suffix `.appspot.com`, update `VITE_FIREBASE_STORAGE_BUCKET` in your `.env` to match your actual bucket name.
-4. **Billing Check**: Firebase Spark (free tier) includes 5 GB of Cloud Storage and 1 GB/day download bandwidth, which is more than sufficient for testing.
-
----
-
-## 5. Provision the First Administrator Safely
-
-To ensure strict administrative security, Firebase does not grant admin access by default to arbitrary accounts. Authorization requires adding the user's UID to the `/admins` registry in the Realtime Database.
-
-### Step 1: Create the Admin Account in Firebase Authentication
-1. In Firebase Console, go to **Authentication -> Users** tab.
-2. Click **Add user**.
-3. Enter:
-   - **Email**: `admin@campusnotes.internal`
-   - **Password**: Enter your secure administrator password (minimum 6 characters, e.g., `CampusAdmin@2026`).
-4. Click **Add user**.
-5. Once created, hover over the newly created user and **copy the User UID** (e.g., `aBcDeFg12345...`).
-
-### Step 2: Authorize the Administrator UID in Realtime Database
-1. Go to **Build -> Realtime Database -> Data** tab.
-2. Locate the root node or click the `+` button on the root node to add a child.
-3. Add the node:
-   - **Name**: `admins`
-4. Under `admins`, add a child:
-   - **Name**: `<Paste your User UID here>`
-   - **Value**: `true` (as boolean or string `"true"`)
-5. Click **Add**.
-
-Now your account is fully authorized. When logging in at `/admin/login`, you can simply enter:
-- **Admin ID**: `admin`
-- **Password**: `<Your secure administrator password>`
-
-The frontend automatically resolves `admin` to `admin@campusnotes.internal` and validates the user against `/admins/{uid}`.
-
-> **Local Development Fallback**: If you run locally before provisioning the Firebase account, you can sign in directly using:
-> - **Username**: `admin`
-> - **Password**: `admin`
-> This activates an initial development session with an advisory banner reminding you to configure live credentials before deployment.
-
----
-
-## 6. Apply Security Rules & Database Indexes
-
-### Apply Realtime Database Rules
-1. In Firebase Console, go to **Build -> Realtime Database -> Rules** tab.
-2. Copy the entire contents of `database.rules.json`:
+### How to Publish Rules:
+1. Open [Firebase Console](https://console.firebase.google.com/) -> Select project **`campusnotes-e62cf`**.
+2. In the left navigation, click **Build -> Realtime Database**.
+3. Click the **Rules** tab at the top.
+4. Replace the entire content with the JSON below and click **Publish**.
 
 ```json
 {
@@ -161,132 +66,77 @@ The frontend automatically resolves `admin` to `admin@campusnotes.internal` and 
       ".read": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
       ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
       ".indexOn": ["subjectId", "category", "academicYear", "createdAt"]
+    },
+    "file_blobs": {
+      "$blobId": {
+        ".read": "root.child('settings').child('maintenanceMode').val() !== true && (data.child('published').val() === true || (auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)))",
+        ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
+        ".validate": "newData.hasChildren(['blob_id', 'material_id', 'file_name', 'file_size_bytes', 'data_base64'])"
+      }
     }
   }
 }
 ```
-3. Click **Publish**.
-
-**Why this structure is secure:**
-- Firebase Realtime Database rules do not filter queries automatically.
-- Materials are securely partitioned: public visitors query `/publicMaterials` (published only).
-- Drafts and unpublished materials remain in `/materials`, where unauthenticated reading is strictly denied (`auth != null && ...`).
-- Global `.read` and `.write` are strictly omitted (never set to true).
-
-### Apply Cloud Storage Rules
-1. In Firebase Console, go to **Build -> Storage -> Rules** tab.
-2. If Cloud Storage has not been created yet, click **Get started** in the Storage tab, choose your region, and create the default bucket (`campusnotes-e62cf.firebasestorage.app`).
-3. Copy the entire contents of `storage.rules`:
-
-```javascript
-rules_version = '2';
-service firebase.storage {
-  match /b/{bucket}/o {
-    
-    // Strict administrator verification:
-    // Requires authenticated session from Firebase Auth matching canonical admin email, verified UID, or token claim
-    function isAuthorizedAdmin() {
-      return request.auth != null && (
-        request.auth.token.email == 'admin@campusnotes.internal' ||
-        request.auth.uid == 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' ||
-        request.auth.token.admin == true ||
-        request.auth.token.role == 'admin' ||
-        request.auth.token.email.matches('.*@campusnotes[.]internal')
-      );
-    }
-
-    // Study Materials Storage (CSE Semester 5)
-    // Structure: materials/{subjectId}/{materialId}/{fileName}
-    match /materials/{subjectId}/{materialId}/{fileName} {
-      // 1. Read access:
-      // - Authenticated administrators can read all materials (published or draft, live or maintenance)
-      // - Public visitors can only read published files when maintenance mode is not active
-      allow read: if isAuthorizedAdmin() || (
-        resource.metadata.published == 'true' &&
-        resource.metadata.maintenance != 'true'
-      );
-
-      // 2. Upload / Replace access:
-      // - Only authorized administrators may write
-      // - Strict constraints: Content-Type MUST be application/pdf, max file size <= 25 MB
-      allow write: if isAuthorizedAdmin()
-                   && request.resource.size <= 25 * 1024 * 1024
-                   && request.resource.contentType == 'application/pdf';
-
-      // 3. Delete access:
-      // - Only authorized administrators may delete orphaned/retired files
-      allow delete: if isAuthorizedAdmin();
-    }
-
-    // Strict default deny for all other locations
-    match /{allPaths=**} {
-      allow read, write: if false;
-    }
-  }
-}
-```
-4. Click **Publish**.
-
-**Why this Storage rule is secure:**
-- Only authenticated administrators can upload or delete.
-- Files must have `Content-Type: application/pdf` and cannot exceed 25 MB.
-- Public reading is permitted only when `resource.metadata.published == 'true'`, protecting draft PDFs from unauthorized access.
 
 ---
 
-## 7. How to Run Locally on Windows
+## 3. RTDB-Only PDF Storage Architecture
 
-Execute the following commands in PowerShell from the project folder:
+### Why RTDB-Only Storage?
+- Completely eliminates dependencies on Cloud Storage or Blaze billing upgrades.
+- Avoids Cloud Storage 404 bucket errors and stuck uploads.
+- Zero extra costs, fully hosted within Firebase Spark free tier.
 
-```powershell
-# 1. Navigate to the project directory
-cd C:\Users\ayanm\.gemini\antigravity-ide\scratch\campusnotes
+### Storage Structure:
+- **Binary Content (`/file_blobs/{blobId}`)**:
+  - `blob_id`: Unique identifier (`blob_mat_<timestamp>_<random>`)
+  - `material_id`: ID of the associated study material
+  - `file_name`: Original sanitized PDF file name
+  - `file_size_bytes`: Raw byte size of the document
+  - `mime_type`: `application/pdf`
+  - `data_base64`: Base64-encoded PDF string
+  - `published`: Boolean (mirrors publication status for security rules)
+  - `created_at`: Unix timestamp in milliseconds
 
-# 2. Install dependencies (if not already installed)
-npm install
+- **Metadata Partition (`/materials/{id}` and `/publicMaterials/{id}`)**:
+  - Stores metadata ONLY (title, description, subjectId, category, academicYear, unitNumber/assignmentNumber, tags, blobId, fileSize, published, createdAt, updatedAt).
+  - Listing queries (such as `getPublicMaterials` and `getAllMaterialsAdmin`) **NEVER load the Base64 binary**, keeping list operations lightweight, instant, and bandwidth-efficient.
 
-# 3. Start the Vite local development server
-npm run dev -- --host 127.0.0.1
-```
+### Size Limitations:
+- Maximum raw PDF file size: **6 MB** (6,291,456 bytes).
+- Base64 expansion: ~33.3% => ~8.0 MB Base64 string.
+- Realtime Database node limit: 10 MB per individual string.
+- 6 MB guarantees safe headroom for JSON wrappers and WebSocket frame transmission.
 
-### Local URLs:
-- **Public Portal**: `http://127.0.0.1:5173/`
-- **Admin Login**: `http://127.0.0.1:5173/admin/login`
-- **Admin Dashboard**: `http://127.0.0.1:5173/admin/dashboard`
-
----
-
-## 8. Backup & Restore Realtime Database Before Destructive Testing
-
-To protect any existing data before testing deletions or migrations:
-
-### Backup (Export JSON)
-1. Go to Firebase Console -> **Build -> Realtime Database -> Data** tab.
-2. Click the three dots icon (`⋮`) in the top right of the data viewer.
-3. Select **Export JSON**.
-4. Save the backup file to your computer.
-
-### Restore (Import JSON)
-1. In the same menu (`⋮`), select **Import JSON**.
-2. Select your previously exported JSON file to restore all subjects and materials immediately.
+### PDF Integrity Validation:
+- Validates file extension (`.pdf`) and MIME type (`application/pdf`).
+- Inspects magic bytes (`%PDF-` / `[0x25, 0x50, 0x44, 0x46, 0x2D]`) before encoding to prevent invalid or disguised files.
+- Decodes Base64 back into `application/pdf` binary Blob for high-fidelity native viewing and downloading.
 
 ---
 
-## 9. End-to-End Live Verification Checklist
+## 4. Provisioning Admin Access
 
-Once your credentials are in `.env`, test the complete workflow:
+1. In Firebase Console, go to **Authentication -> Users**.
+2. Click **Add user**:
+   - Email: `admin@campusnotes.internal`
+   - Password: `CampusAdmin@2026` (or your preferred admin password).
+3. Copy the User UID (e.g., `xCyTNtjZdHPW7a51dlNGjBK3aAk1`).
+4. In Realtime Database Data tab, ensure `/admins/{uid}: true` is added.
+5. You can log in on the live site at `/admin/login` using either:
+   - ID: `admin` / Password: `<Your Password>` (automatically resolves to `admin@campusnotes.internal`), or
+   - ID: `admin@campusnotes.internal` / Password: `<Your Password>`.
 
-| Step | Action | Expected Result |
-| :---: | :--- | :--- |
-| **1** | Open `/admin/login` and log in with `admin` / your password | Redirects to `/admin/dashboard` with admin session active. |
-| **2** | Go to **Subjects** tab and edit a subject (e.g., `23CS3501`) | Subject description updates in real time in the database. |
-| **3** | Click **Upload Material**, attach a valid PDF (<25 MB), and submit | Progress bar tracks upload; file appears in Storage under `/materials/...`. |
-| **4** | Mark the material as **Published** | Material appears simultaneously in `/materials` and `/publicMaterials`. |
-| **5** | Open `http://127.0.0.1:5173/` in an Incognito / private window | The new material appears instantly on the public home page via WebSocket listener. |
-| **6** | Click **Preview** and **Download** on the public material card | PDF opens in viewer and downloads with original file name. |
-| **7** | In Admin Dashboard, edit the material title and click Save | Title changes immediately on the public website without page refresh. |
-| **8** | Click the **Unpublish** toggle in Admin Dashboard | Material disappears immediately from public listings. |
-| **9** | Try accessing the unpublished download URL in Incognito | Access is blocked (`resource.metadata.published == 'false'`). |
-| **10** | Click **Delete Material** in Admin Dashboard | Both database records and the Cloud Storage PDF file are cleaned up safely. |
-| **11** | Try uploading a non-PDF file (.exe, .jpg) or a file > 25 MB | Client validation and Cloud Storage rules immediately reject the operation. |
-| **12** | Refresh the browser (`F5`) | All saved database subjects and published materials remain fully persistent. |
+---
+
+## 5. Deployment Verification Checklist
+
+| Test Item | Verification Method |
+| :--- | :--- |
+| **Rule Publication** | Paste rules into RTDB Rules tab and click Publish; no PERMISSION_DENIED on `/settings` or `/subjects`. |
+| **PDF Upload** | In Admin Dashboard -> Upload Material, upload a PDF (<6 MB); verify upload completes and file appears in `/file_blobs/`. |
+| **PDF Replacement** | Click Replace PDF on a material; verify new blob is written, verified, and old blob deleted safely. |
+| **PDF Preview** | Open a material detail page (`/materials/:id`); verify PDF loads and renders in reader. |
+| **PDF Download** | Click "Download PDF"; verify downloaded file size and `%PDF-` signature matches original. |
+| **Maintenance Mode** | Toggle Maintenance Mode in Admin Dashboard; verify public pages redirect while admin stays accessible. |
+| **Clean Listing** | Open Materials page; confirm 100+ items load instantly without downloading binary blobs. |

@@ -185,11 +185,13 @@ export const AdminDashboardPage: React.FC = () => {
   const handleTogglePublish = async (material: StudyMaterial) => {
     try {
       const newStatus = await togglePublishMaterial(material);
+      setMaterials((prev) =>
+        prev.map((m) => (m.id === material.id ? { ...m, published: newStatus } : m))
+      );
       toast.success(
         newStatus ? 'Material Published' : 'Material Unpublished',
         `"${material.title}" is now ${newStatus ? 'visible to students' : 'saved as draft'}.`
       );
-      await refreshData();
     } catch (err: unknown) {
       toast.error('Update Failed', err instanceof Error ? err.message : String(err));
     }
@@ -197,14 +199,14 @@ export const AdminDashboardPage: React.FC = () => {
 
   const handleDeleteMaterial = async (material: StudyMaterial) => {
     const confirm = window.confirm(
-      `Are you sure you want to permanently delete "${material.title}"?\nThis removes both database records and the PDF stored in Cloud Storage.`
+      `Are you sure you want to permanently delete "${material.title}"?\nThis removes both database records and the PDF stored in Realtime Database.`
     );
     if (!confirm) return;
 
     try {
       await deleteMaterial(material);
+      setMaterials((prev) => prev.filter((m) => m.id !== material.id));
       toast.success('Material Deleted', `"${material.title}" has been deleted.`);
-      await refreshData();
     } catch (err: unknown) {
       toast.error('Deletion Failed', err instanceof Error ? err.message : String(err));
     }
@@ -267,7 +269,7 @@ export const AdminDashboardPage: React.FC = () => {
     if (file.size > MAX_FILE_SIZE_BYTES) {
       toast.error(
         'File Exceeds Limit',
-        `File size (${formatFileSize(file.size)}) exceeds maximum allowed size of 25 MB.`
+        `File size (${formatFileSize(file.size)}) exceeds maximum allowed size of 6 MB for Realtime Database storage.`
       );
       e.target.value = '';
       setUploadFile(null);
@@ -303,7 +305,7 @@ export const AdminDashboardPage: React.FC = () => {
       const materialId = `mat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       const parsedNum = uploadNum.trim() ? parseInt(uploadNum.trim(), 10) : null;
 
-      // 1. Upload to Cloud Storage
+      // 1. Upload to Realtime Database
       const uploadResult = await uploadPdfFile(
         uploadFile,
         uploadSubjectId,
@@ -317,7 +319,7 @@ export const AdminDashboardPage: React.FC = () => {
       );
 
       // 2. Save metadata to RTDB
-      await createMaterial({
+      const newMaterial: StudyMaterial = {
         id: materialId,
         title: uploadTitle.trim(),
         description: uploadDesc.trim(),
@@ -330,10 +332,18 @@ export const AdminDashboardPage: React.FC = () => {
         fileName: uploadResult.fileName,
         storagePath: uploadResult.storagePath,
         downloadUrl: uploadResult.downloadUrl,
+        blobId: uploadResult.blobId,
         fileSize: uploadResult.fileSize,
         published: uploadPublished,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
         createdBy: admin?.uid || 'admin',
-      });
+      };
+
+      await createMaterial(newMaterial);
+
+      // Optimistically insert into materials state
+      setMaterials((prev) => [newMaterial, ...prev]);
 
       toast.success('Upload Successful', 'Material uploaded successfully.');
 
@@ -935,11 +945,11 @@ export const AdminDashboardPage: React.FC = () => {
 
                             <td className="py-3 px-3.5">
                               <a
-                                href={mat.downloadUrl}
+                                href={`/materials/${mat.id}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="font-medium text-slate-800 hover:text-blue-600 truncate max-w-[160px] block"
-                                title={`Preview: ${mat.fileName}`}
+                                title={`Open Reader: ${mat.fileName}`}
                               >
                                 {mat.fileName}
                               </a>
@@ -1061,7 +1071,7 @@ export const AdminDashboardPage: React.FC = () => {
 
                       <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
                         <a
-                          href={mat.downloadUrl}
+                          href={`/materials/${mat.id}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-slate-800 hover:text-blue-600 font-medium truncate max-w-[180px]"
@@ -1244,7 +1254,7 @@ export const AdminDashboardPage: React.FC = () => {
                       {uploadFile ? `Selected: ${uploadFile.name}` : 'Click to select a PDF from your computer'}
                     </p>
                     <p className="text-[11px] text-slate-400 mt-0.5">
-                      {uploadFile ? `Size: ${formatFileSize(uploadFile.size)}` : 'Accepts .pdf files only, up to 25 MB'}
+                      {uploadFile ? `Size: ${formatFileSize(uploadFile.size)}` : 'Accepts .pdf files only, up to 6 MB for Realtime Database storage'}
                     </p>
                   </label>
                 </div>
@@ -1267,7 +1277,7 @@ export const AdminDashboardPage: React.FC = () => {
               {uploadProgress !== null && (
                 <div className="space-y-1.5 p-3 bg-slate-50 rounded-lg border border-slate-200">
                   <div className="flex items-center justify-between text-xs font-medium text-slate-800">
-                    <span>Uploading to Cloud Storage...</span>
+                    <span>Uploading PDF to Realtime Database...</span>
                     <span>{uploadProgress}%</span>
                   </div>
                   <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">

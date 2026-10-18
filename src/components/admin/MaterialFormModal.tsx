@@ -248,7 +248,7 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
 
         const materialId = `mat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
-        // 1. Upload to Cloud Storage
+        // 1. Upload to Realtime Database
         const uploadResult = await uploadPdfFile(
           selectedFile,
           subjectId,
@@ -276,6 +276,7 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
           fileName: uploadResult.fileName,
           storagePath: uploadResult.storagePath,
           downloadUrl: uploadResult.downloadUrl,
+          blobId: uploadResult.blobId,
           fileSize: uploadResult.fileSize,
           published,
           createdBy: admin?.uid || 'admin',
@@ -474,12 +475,12 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
                 Current PDF Document
               </span>
               <a
-                href={editingMaterial.downloadUrl}
+                href={`/materials/${editingMaterial.id}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
               >
-                <span>Preview Current PDF</span>
+                <span>Open Document Reader</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
             </div>
@@ -498,11 +499,11 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
           <label className="block text-xs font-medium text-slate-700 mb-1">
             {isEdit
               ? 'Select Replacement PDF (Optional)'
-              : 'Select PDF Document (Max 25 MB) *'}
+              : 'Select PDF Document (Max 6 MB) *'}
           </label>
           {isEdit && (
             <p className="text-[11px] text-slate-500 mb-2">
-              Leave empty to keep current file. Selecting a new PDF replaces the file safely in Firebase Storage upon save.
+              Leave empty to keep current file. Selecting a new PDF replaces the file safely in Realtime Database upon save.
             </p>
           )}
 
@@ -527,7 +528,7 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
               <p className="text-[11px] text-slate-400 mt-0.5">
                 {selectedFile
                   ? `File size: ${formatFileSize(selectedFile.size)}`
-                  : 'PDF format (.pdf) up to 25 MB'}
+                  : 'PDF format (.pdf) up to 6 MB for Realtime Database storage'}
               </p>
             </label>
           </div>
@@ -550,7 +551,7 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
         {uploadProgress !== null && (
           <div className="space-y-1.5 p-3 bg-slate-50 rounded-lg border border-slate-200">
             <div className="flex items-center justify-between text-xs font-medium text-slate-800">
-              <span>Uploading to Firebase Cloud Storage...</span>
+              <span>Uploading to Realtime Database...</span>
               <span>{uploadProgress}%</span>
             </div>
             <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">

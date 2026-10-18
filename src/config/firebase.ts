@@ -1,7 +1,6 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
 import { getDatabase, Database } from 'firebase/database';
-import { getStorage, FirebaseStorage } from 'firebase/storage';
 
 export const DEFAULT_DATABASE_URL = 'https://campusnotes-e62cf-default-rtdb.firebaseio.com/';
 export const DEFAULT_PROJECT_ID = 'campusnotes-e62cf';
@@ -36,7 +35,8 @@ export const isFirebaseConfigured = Boolean(
 let app: ReturnType<typeof initializeApp> | undefined;
 let auth: ReturnType<typeof getAuth> | undefined;
 let database: ReturnType<typeof getDatabase> | undefined;
-let storage: ReturnType<typeof getStorage> | undefined;
+// Realtime Database is the sole file storage mechanism for CampusNotes
+const storage = undefined;
 
 try {
   if (isFirebaseConfigured) {
@@ -47,7 +47,6 @@ try {
     }
     auth = getAuth(app);
     database = getDatabase(app, databaseURL);
-    storage = getStorage(app);
   } else if (databaseURL) {
     if (!getApps().length) {
       app = initializeApp({ projectId: DEFAULT_PROJECT_ID, databaseURL, storageBucket: DEFAULT_STORAGE_BUCKET });

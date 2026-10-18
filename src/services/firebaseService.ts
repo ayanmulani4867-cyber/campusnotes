@@ -8,7 +8,6 @@ import {
   orderByChild,
   equalTo,
   limitToLast,
-  serverTimestamp,
   onValue,
 } from 'firebase/database';
 
@@ -16,15 +15,15 @@ type RtdbSnapshot = {
   exists(): boolean;
   val(): any;
 };
+
+import { database, isFirebaseConfigured } from '../config/firebase';
 import {
-  ref as storageRef,
-  uploadBytesResumable,
-  getDownloadURL,
-  deleteObject,
-  updateMetadata,
-} from 'firebase/storage';
-import { database, storage, isFirebaseConfigured } from '../config/firebase';
-import { Subject, StudyMaterial, DashboardStats, AcademicCategory } from '../types';
+  Subject,
+  StudyMaterial,
+  DashboardStats,
+  AcademicCategory,
+  FileBlobRecord,
+} from '../types';
 import {
   OFFICIAL_CSE_SEM_5_SUBJECTS,
   EXCLUDED_SUBJECT_NAMES,
@@ -33,7 +32,111 @@ import {
 import { INITIAL_DEMO_MATERIALS } from '../constants/initialMaterials';
 import { cacheService } from './cacheService';
 
-export const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB strictly enforced
+/**
+ * Realtime Database limits a single node/leaf string to 10 MB.
+ * Base64 encoding increases raw binary size by ~33.3% (4/3 ratio).
+ * A 6 MB raw PDF produces approximately 8.0 MB of Base64, leaving ample headroom
+ * under the 10 MB limit for JSON metadata and WebSocket frame overhead.
+ */
+export const MAX_RTDB_PDF_SIZE_BYTES = 6 * 1024 * 1024; // 6 MB max raw PDF size
+export const MAX_FILE_SIZE_BYTES = MAX_RTDB_PDF_SIZE_BYTES;
+
+// In-memory cache for created object URLs to prevent duplicate memory allocation
+const objectUrlMemoryCache = new Map<string, string>();
+
+/**
+ * Validates that the file has a genuine PDF magic byte header (%PDF-).
+ * ASCII codes: 0x25 (%), 0x50 (P), 0x44 (D), 0x46 (F), 0x2D (-)
+ */
+export async function validatePdfSignature(file: File): Promise<boolean> {
+  if (!file || file.size < 5) return false;
+  try {
+    const slice = file.slice(0, 5);
+    const buffer = await slice.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    return (
+      bytes[0] === 0x25 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x44 &&
+      bytes[3] === 0x46 &&
+      bytes[4] === 0x2D
+    );
+  } catch (err) {
+    console.warn('PDF signature check notice:', err);
+    return false;
+  }
+}
+
+/**
+ * Asynchronously converts a File to a Base64 string without blocking the main browser thread.
+ * Native FileReader processes the read in a browser background thread.
+ */
+export function fileToBase64Async(
+  file: File,
+  onProgress?: (percent: number, bytesRead: number, totalBytes: number) => void
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onprogress = (evt) => {
+      if (evt.lengthComputable && onProgress) {
+        // First 40% of progress represents reading from disk
+        const percent = Math.round((evt.loaded / evt.total) * 40);
+        onProgress(percent, evt.loaded, evt.total);
+      }
+    };
+
+    reader.onload = () => {
+      try {
+        const result = reader.result as string;
+        // Data URL format: "data:application/pdf;base64,JVBERi0xLj..."
+        const base64Index = result.indexOf(';base64,');
+        if (base64Index === -1) {
+          reject(new Error('Failed to encode PDF: Invalid Data URL format.'));
+          return;
+        }
+        const base64String = result.substring(base64Index + 8);
+        resolve(base64String);
+      } catch (err) {
+        reject(err);
+      }
+    };
+
+    reader.onerror = () => {
+      reject(new Error('Failed to read PDF file from disk.'));
+    };
+
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Converts a Base64 string back into a standard binary Blob.
+ */
+export function base64ToBlob(base64Data: string, mimeType = 'application/pdf'): Blob {
+  const binaryString = atob(base64Data);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mimeType });
+}
+
+/**
+ * Revokes a cached blob URL to free browser memory.
+ */
+export function revokeBlobUrl(blobId: string): void {
+  const existing = objectUrlMemoryCache.get(blobId);
+  if (existing) {
+    try {
+      URL.revokeObjectURL(existing);
+    } catch {
+      // Ignore revocation errors
+    }
+    objectUrlMemoryCache.delete(blobId);
+  }
+}
 
 // ==========================================
 // PUBLIC METHODS (Cached & Partitioned)
@@ -41,7 +144,6 @@ export const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB strictly enforced
 
 /**
  * Fetch active subjects for CSE Semester 5
- * Enforces the exact 9 official subjects and filters out excluded subjects
  */
 export async function getPublicSubjects(): Promise<Subject[]> {
   const cacheKey = 'public_subjects';
@@ -88,8 +190,8 @@ export async function getPublicSubjects(): Promise<Subject[]> {
 }
 
 /**
- * Fetch published study materials from the /publicMaterials node
- * Bounded query protects against high concurrency bursts
+ * Fetch published study materials from the /publicMaterials node.
+ * Binary Base64 content is NOT stored in this node, ensuring fast listing.
  */
 export async function getPublicMaterials(limit = 100): Promise<StudyMaterial[]> {
   const cacheKey = `public_materials_limit_${limit}`;
@@ -196,6 +298,70 @@ export async function getPublicMaterialsBySubject(subjectId: string): Promise<St
 }
 
 // ==========================================
+// RTDB-ONLY PDF BLOB RETRIEVAL & STREAMING
+// ==========================================
+
+/**
+ * Fetch PDF blob from the isolated /file_blobs partition by blob ID.
+ * This is only retrieved when a user actually views or downloads a document.
+ */
+export async function getMaterialPdfBlob(blobId: string): Promise<FileBlobRecord | null> {
+  if (!database || !blobId) return null;
+
+  try {
+    const blobRef = ref(database, `file_blobs/${blobId}`);
+    const snapshot = await get(blobRef);
+    if (snapshot.exists()) {
+      return snapshot.val() as FileBlobRecord;
+    }
+  } catch (err) {
+    console.error(`Error fetching PDF blob ${blobId} from RTDB:`, err);
+    throw err;
+  }
+  return null;
+}
+
+/**
+ * Resolves a preview and download URL for any material.
+ * - If stored as Base64 in RTDB (/file_blobs/): fetches on demand, decodes to Blob, creates a blob: URL.
+ * - If legacy URL (/demo-pdfs/ or external HTTP): returns the URL directly.
+ */
+export async function fetchPdfBlobUrl(material: StudyMaterial): Promise<string> {
+  // 1. Direct path for local demo PDFs
+  if (material.downloadUrl && material.downloadUrl.startsWith('/demo-pdfs/')) {
+    return material.downloadUrl;
+  }
+
+  // 2. Resolve blobId from material metadata
+  let blobId = material.blobId;
+  if (!blobId && material.storagePath && material.storagePath.startsWith('rtdb://file_blobs/')) {
+    blobId = material.storagePath.replace('rtdb://file_blobs/', '');
+  }
+
+  if (blobId) {
+    // Return cached object URL if already created in this browser session
+    if (objectUrlMemoryCache.has(blobId)) {
+      return objectUrlMemoryCache.get(blobId)!;
+    }
+
+    const blobRecord = await getMaterialPdfBlob(blobId);
+    if (blobRecord && blobRecord.data_base64) {
+      const blob = base64ToBlob(blobRecord.data_base64, blobRecord.mime_type || 'application/pdf');
+      const url = URL.createObjectURL(blob);
+      objectUrlMemoryCache.set(blobId, url);
+      return url;
+    }
+  }
+
+  // 3. Fallback to existing downloadUrl if valid HTTP URL
+  if (material.downloadUrl && material.downloadUrl.startsWith('http')) {
+    return material.downloadUrl;
+  }
+
+  throw new Error('PDF document content could not be located in Realtime Database.');
+}
+
+// ==========================================
 // ADMIN METHODS (Strictly Authorized)
 // ==========================================
 
@@ -266,7 +432,6 @@ export async function saveSubject(
     });
   }
 
-  // Invalidate public and admin subject caches
   cacheService.invalidate('public_subjects');
 }
 
@@ -276,7 +441,6 @@ export async function saveSubject(
 export async function deleteSubject(subjectId: string): Promise<void> {
   if (!database) throw new Error('Database not initialized');
 
-  // Verify whether materials reference this subject
   const materialsRef = ref(database, 'materials');
   const q = query(materialsRef, orderByChild('subjectId'), equalTo(subjectId));
   const snapshot = await get(q);
@@ -293,7 +457,8 @@ export async function deleteSubject(subjectId: string): Promise<void> {
 }
 
 /**
- * Fetch all materials for administrator (both published and drafts)
+ * Fetch all materials for administrator (both published and drafts).
+ * Base64 content is isolated under /file_blobs and is NOT loaded here.
  */
 export async function getAllMaterialsAdmin(): Promise<StudyMaterial[]> {
   if (!database) return INITIAL_DEMO_MATERIALS;
@@ -321,130 +486,119 @@ export async function getAllMaterialsAdmin(): Promise<StudyMaterial[]> {
 }
 
 /**
- * Upload PDF to Firebase Cloud Storage with strict validation
+ * Upload PDF directly to Firebase Realtime Database as Base64.
+ * Validates format, %PDF- magic bytes, and enforces the 6 MB raw file limit.
  */
-export function uploadPdfFile(
+export async function uploadPdfFile(
   file: File,
-  subjectId: string,
+  _subjectId: string,
   materialId: string,
   onProgress?: (percent: number, bytesTransferred: number, totalBytes: number) => void,
   isPublished: boolean = true
-): Promise<{ storagePath: string; downloadUrl: string; fileName: string; fileSize: number }> {
-  return new Promise((resolve, reject) => {
-    if (!storage) {
-      reject(new Error('Firebase Cloud Storage is not initialized. Check your credentials.'));
-      return;
-    }
-
-    // 1. Validate file format
-    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-      reject(new Error('Only valid PDF documents are allowed.'));
-      return;
-    }
-
-    // 2. Validate file size (max 25MB)
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
-      reject(new Error(`File size (${sizeMB} MB) exceeds maximum allowed limit of 25 MB.`));
-      return;
-    }
-
-    // 3. Unique sanitised file name and storage path
-    const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const uniqueFileName = `${Date.now()}_${sanitizedName}`;
-    const storagePath = `materials/${subjectId}/${materialId}/${uniqueFileName}`;
-    const fileRef = storageRef(storage, storagePath);
-
-    const uploadTask = uploadBytesResumable(fileRef, file, {
-      contentType: 'application/pdf',
-      customMetadata: {
-        academicDepartment: 'CSE',
-        semester: '5',
-        originalFileName: file.name,
-        published: String(isPublished),
-      },
-    });
-
-    // 45-second timeout guard to prevent UI from staying stuck indefinitely
-    // if the Storage bucket hasn't been initialized or network is blocked
-    const uploadTimeout = setTimeout(() => {
-      try {
-        uploadTask.cancel();
-      } catch {
-        // Ignore cancel errors
-      }
-      reject(
-        new Error(
-          'Upload timed out after 45 seconds. Please ensure Firebase Cloud Storage is enabled in Firebase Console (Storage -> Get Started) and rules are published.'
-        )
-      );
-    }, 45000);
-
-    uploadTask.on(
-      'state_changed',
-      (snapshot: { bytesTransferred: number; totalBytes: number }) => {
-        const percent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-        if (onProgress) {
-          onProgress(percent, snapshot.bytesTransferred, snapshot.totalBytes);
-        }
-      },
-      (error: unknown) => {
-        clearTimeout(uploadTimeout);
-        const errObj = error as { code?: string; message?: string };
-        const code = errObj?.code || '';
-
-        if (code === 'storage/unauthorized') {
-          reject(
-            new Error(
-              'Permission Denied: Firebase Storage rules rejected this upload. Please apply storage.rules in Firebase Console -> Storage -> Rules.'
-            )
-          );
-        } else if (code === 'storage/bucket-not-found' || code === 'storage/project-not-found') {
-          reject(
-            new Error(
-              'Storage Bucket Not Found: Cloud Storage has not been created yet. Open Firebase Console -> Storage and click "Get started".'
-            )
-          );
-        } else if (code === 'storage/canceled') {
-          reject(new Error('Upload was canceled.'));
-        } else {
-          reject(new Error(errObj?.message || 'Failed to upload PDF file to Firebase Cloud Storage.'));
-        }
-      },
-      async () => {
-        clearTimeout(uploadTimeout);
-        try {
-          const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-          resolve({
-            storagePath,
-            downloadUrl,
-            fileName: file.name,
-            fileSize: file.size,
-          });
-        } catch (urlErr) {
-          reject(urlErr);
-        }
-      }
-    );
-  });
-}
-
-/**
- * Safely delete a file from Cloud Storage
- */
-export async function deleteStorageFile(filePath: string): Promise<void> {
-  if (!storage || !filePath) return;
-  try {
-    const fileRef = storageRef(storage, filePath);
-    await deleteObject(fileRef);
-  } catch (err: unknown) {
-    // If file doesn't exist anymore, log and proceed
-    console.warn(`Storage file deletion notice for ${filePath}:`, err);
+): Promise<{ storagePath: string; downloadUrl: string; fileName: string; fileSize: number; blobId: string }> {
+  if (!database) {
+    throw new Error('Firebase Realtime Database is not initialized.');
   }
+
+  // 1. File type and extension validation
+  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+    throw new Error('Only valid PDF documents (.pdf) are permitted.');
+  }
+
+  // 2. Strict file size validation (6 MB max for RTDB storage)
+  if (file.size > MAX_RTDB_PDF_SIZE_BYTES) {
+    const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+    throw new Error(
+      `File size (${sizeMB} MB) exceeds maximum allowed limit of 6 MB for Realtime Database storage. (Base64 encoding expands file size by ~33%, requiring raw size <= 6 MB to fit safely within RTDB's 10 MB node threshold).`
+    );
+  }
+
+  // 3. Binary header signature validation (%PDF-)
+  const isSignatureValid = await validatePdfSignature(file);
+  if (!isSignatureValid) {
+    throw new Error('Invalid file format: File header does not match standard PDF signature (%PDF-).');
+  }
+
+  // 4. Asynchronous Base64 conversion off the main thread
+  onProgress?.(10, Math.round(file.size * 0.1), file.size);
+  const base64Data = await fileToBase64Async(file, onProgress);
+  onProgress?.(50, Math.round(file.size * 0.5), file.size);
+
+  const timestamp = Date.now();
+  const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const blobId = `blob_${materialId}_${timestamp}`;
+  const storagePath = `rtdb://file_blobs/${blobId}`;
+  const downloadUrl = `rtdb://${blobId}`;
+
+  const blobRecord: FileBlobRecord = {
+    blob_id: blobId,
+    material_id: materialId,
+    file_name: sanitizedName,
+    file_size_bytes: file.size,
+    mime_type: 'application/pdf',
+    data_base64: base64Data,
+    published: isPublished,
+    created_at: timestamp,
+  };
+
+  onProgress?.(70, Math.round(file.size * 0.7), file.size);
+
+  // 5. Save blob to RTDB /file_blobs/{blobId} with a 45-second timeout guard
+  const writePromise = set(ref(database, `file_blobs/${blobId}`), blobRecord);
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(
+      () =>
+        reject(
+          new Error(
+            'Upload timed out after 45 seconds. Please ensure database.rules.json is published in Firebase Console -> Realtime Database -> Rules.'
+          )
+        ),
+      45000
+    )
+  );
+
+  await Promise.race([writePromise, timeoutPromise]);
+  onProgress?.(100, file.size, file.size);
+
+  return {
+    storagePath,
+    downloadUrl,
+    fileName: file.name,
+    fileSize: file.size,
+    blobId,
+  };
 }
 
 /**
- * Save new study material with atomic partition sync & orphan file rollback
+ * Check if a blob ID is referenced by any other material in RTDB
+ */
+export async function isBlobReferencedByOthers(
+  blobId: string,
+  excludeMaterialId: string
+): Promise<boolean> {
+  if (!database || !blobId) return false;
+  try {
+    const snapshot = await get(ref(database, 'materials'));
+    if (snapshot.exists()) {
+      const data = snapshot.val() as Record<string, StudyMaterial>;
+      for (const [id, item] of Object.entries(data)) {
+        if (
+          id !== excludeMaterialId &&
+          (item.blobId === blobId || item.storagePath === `rtdb://file_blobs/${blobId}`)
+        ) {
+          return true;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Notice checking blob references:', err);
+  }
+  return false;
+}
+
+/**
+ * Save new study material with metadata in /materials and /publicMaterials.
+ * If saving metadata fails, cleans up the uploaded blob to avoid orphans.
  */
 export async function createMaterial(
   data: Omit<StudyMaterial, 'createdAt' | 'updatedAt'>
@@ -459,10 +613,8 @@ export async function createMaterial(
   };
 
   const updates: Record<string, unknown> = {};
-  // Always write to master admin node
   updates[`materials/${data.id}`] = fullData;
 
-  // If published, write simultaneously to public node
   if (data.published) {
     updates[`publicMaterials/${data.id}`] = fullData;
   }
@@ -471,17 +623,22 @@ export async function createMaterial(
     await update(ref(database), updates);
     cacheService.clearAll();
   } catch (dbError) {
-    // Orphan cleanup: if database save failed, delete the uploaded storage file
-    console.error('Metadata creation failed. Performing orphan cleanup on storage...', dbError);
-    if (data.storagePath) {
-      await deleteStorageFile(data.storagePath);
+    console.error('Metadata creation failed. Performing orphan cleanup on file_blobs...', dbError);
+    if (data.blobId) {
+      try {
+        await remove(ref(database, `file_blobs/${data.blobId}`));
+      } catch {
+        // Ignore
+      }
     }
     throw dbError;
   }
 }
 
 /**
- * Update material metadata and maintain public/private partition consistency
+ * Update material metadata and maintain public/private partition consistency.
+ * Uses a single multi-path update so changes to /materials, /publicMaterials, and
+ * the blob's published state are atomic.
  */
 export async function updateMaterial(
   id: string,
@@ -503,59 +660,25 @@ export async function updateMaterial(
   if (merged.published) {
     updates[`publicMaterials/${id}`] = merged;
   } else {
-    // If unpublished, ensure removal from public index
     updates[`publicMaterials/${id}`] = null;
   }
 
-  await update(ref(database), updates);
-
-  // Sync published state to Cloud Storage metadata to enforce storage security rules
-  if (storage && merged.storagePath) {
-    try {
-      const fileRef = storageRef(storage, merged.storagePath);
-      await updateMetadata(fileRef, {
-        customMetadata: {
-          published: String(merged.published),
-        },
-      });
-    } catch (metaErr) {
-      console.warn('Storage metadata sync notice:', metaErr);
-    }
+  // Synchronize published state to the file blob record so security rules stay consistent
+  if (merged.blobId && merged.published !== existingMaterial.published) {
+    updates[`file_blobs/${merged.blobId}/published`] = merged.published;
   }
 
+  await update(ref(database), updates);
   cacheService.clearAll();
 }
 
 /**
- * Check if a storage path is referenced by any other material in RTDB
- */
-export async function isStoragePathReferencedByOthers(
-  storagePath: string,
-  excludeMaterialId: string
-): Promise<boolean> {
-  if (!database || !storagePath) return false;
-  try {
-    const snapshot = await get(ref(database, 'materials'));
-    if (snapshot.exists()) {
-      const data = snapshot.val() as Record<string, StudyMaterial>;
-      for (const [id, item] of Object.entries(data)) {
-        if (id !== excludeMaterialId && item.storagePath === storagePath) {
-          return true;
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('Notice checking storage path references:', err);
-  }
-  return false;
-}
-
-/**
- * Replace material PDF file safely:
- * 1. Uploads replacement first.
- * 2. Updates database metadata atomically with new file details and form updates.
- * 3. Deletes old file only after database write succeeds AND only if not shared by other records.
- * 4. Cleans up newly uploaded file if metadata update fails.
+ * Replace material PDF safely:
+ * 1. Uploads replacement to RTDB under a new versioned blobId.
+ * 2. Verifies the replacement blob exists and is readable.
+ * 3. Atomically updates database metadata with new file details and form changes.
+ * 4. Deletes the old blob only after metadata update confirms AND only if not shared.
+ * 5. Cleans up the new blob if metadata update fails (rollback).
  */
 export async function replaceMaterialPdf(
   material: StudyMaterial,
@@ -564,7 +687,7 @@ export async function replaceMaterialPdf(
     | Partial<StudyMaterial>
     | ((percent: number, bytesTransferred: number, totalBytes: number) => void),
   onProgress?: (percent: number, bytesTransferred: number, totalBytes: number) => void
-): Promise<{ fileName: string; downloadUrl: string }> {
+): Promise<{ fileName: string; downloadUrl: string; blobId: string }> {
   if (!database) throw new Error('Database not initialized');
 
   let additionalMetadataUpdates: Partial<StudyMaterial> | undefined;
@@ -577,13 +700,13 @@ export async function replaceMaterialPdf(
     additionalMetadataUpdates = additionalMetadataOrProgress;
   }
 
-  const oldStoragePath = material.storagePath;
+  const oldBlobId = material.blobId;
   const isPublished =
     additionalMetadataUpdates?.published !== undefined
       ? additionalMetadataUpdates.published
       : material.published;
 
-  // 1. Upload the replacement PDF (preserving or updating published state)
+  // 1. Upload replacement PDF to RTDB under new versioned blobId
   const uploadResult = await uploadPdfFile(
     newFile,
     additionalMetadataUpdates?.subjectId || material.subjectId,
@@ -593,38 +716,57 @@ export async function replaceMaterialPdf(
   );
 
   try {
-    // 2. Update database metadata with new file details and any form field updates
+    // 2. Verify that the new blob was written and can be read back
+    const verifyBlob = await get(ref(database, `file_blobs/${uploadResult.blobId}`));
+    if (!verifyBlob.exists()) {
+      throw new Error('Verification failed: Replacement PDF blob could not be confirmed in database.');
+    }
+
+    // 3. Atomically update material metadata in /materials and /publicMaterials
     const updates: Partial<StudyMaterial> = {
       ...additionalMetadataUpdates,
       fileName: uploadResult.fileName,
       storagePath: uploadResult.storagePath,
       downloadUrl: uploadResult.downloadUrl,
+      blobId: uploadResult.blobId,
       fileSize: uploadResult.fileSize,
     };
 
     await updateMaterial(material.id, updates, material);
 
-    // 3. Delete old file only after database write succeeds, and only if not shared
-    if (oldStoragePath && oldStoragePath !== uploadResult.storagePath) {
-      const isShared = await isStoragePathReferencedByOthers(oldStoragePath, material.id);
-      if (!isShared && !oldStoragePath.startsWith('/demo-pdfs/')) {
-        await deleteStorageFile(oldStoragePath);
+    // 4. Invalidate old cached blob URL if any
+    if (oldBlobId) {
+      revokeBlobUrl(oldBlobId);
+    }
+
+    // 5. Remove old blob only after metadata update succeeds and if not shared
+    if (oldBlobId && oldBlobId !== uploadResult.blobId) {
+      const isShared = await isBlobReferencedByOthers(oldBlobId, material.id);
+      if (!isShared) {
+        await remove(ref(database, `file_blobs/${oldBlobId}`)).catch((delErr: unknown) =>
+          console.warn(`Old blob removal notice for ${oldBlobId}:`, delErr)
+        );
       }
     }
 
     return {
       fileName: uploadResult.fileName,
       downloadUrl: uploadResult.downloadUrl,
+      blobId: uploadResult.blobId,
     };
   } catch (err) {
-    // If updating metadata failed, cleanup the newly uploaded file to avoid orphan
-    await deleteStorageFile(uploadResult.storagePath);
+    // Rollback: if updating metadata failed, cleanup the new uploaded blob to avoid orphans
+    try {
+      await remove(ref(database, `file_blobs/${uploadResult.blobId}`));
+    } catch {
+      // Ignore rollback cleanup error
+    }
     throw err;
   }
 }
 
 /**
- * Delete material: removes both database metadata and Cloud Storage PDF safely
+ * Delete material: removes database metadata and associated RTDB file blob safely
  */
 export async function deleteMaterial(material: StudyMaterial): Promise<void> {
   if (!database) throw new Error('Database not initialized');
@@ -633,53 +775,57 @@ export async function deleteMaterial(material: StudyMaterial): Promise<void> {
   updates[`materials/${material.id}`] = null;
   updates[`publicMaterials/${material.id}`] = null;
 
-  // 1. Remove database entries
+  // 1. Remove database entries from materials & publicMaterials
   await update(ref(database), updates);
   cacheService.clearAll();
 
-  // 2. Remove storage file if not shared by other records
-  if (material.storagePath && !material.storagePath.startsWith('/demo-pdfs/')) {
-    const isShared = await isStoragePathReferencedByOthers(material.storagePath, material.id);
+  // 2. Invalidate cached blob URL
+  if (material.blobId) {
+    revokeBlobUrl(material.blobId);
+  }
+
+  // 3. Remove blob from /file_blobs if present and not shared
+  if (material.blobId) {
+    const isShared = await isBlobReferencedByOthers(material.blobId, material.id);
     if (!isShared) {
-      await deleteStorageFile(material.storagePath);
+      try {
+        await remove(ref(database, `file_blobs/${material.blobId}`));
+      } catch (blobDelErr) {
+        console.warn(`Blob deletion notice for ${material.blobId}:`, blobDelErr);
+      }
     }
   }
 }
 
 /**
  * Maintenance Mode Management
+ * Always defaults to false for public availability.
  */
 export async function getMaintenanceMode(): Promise<boolean> {
   if (!database) {
-    return localStorage.getItem('campusnotes_maintenance_mode') === 'true';
+    return false;
   }
   try {
     const snapshot = await get(ref(database, 'settings/maintenanceMode'));
     if (snapshot.exists()) {
-      const isMaint = Boolean(snapshot.val());
-      localStorage.setItem('campusnotes_maintenance_mode', String(isMaint));
-      return isMaint;
+      return Boolean(snapshot.val());
     }
   } catch (err) {
     console.warn('Notice checking maintenance mode from RTDB:', err);
   }
-  return localStorage.getItem('campusnotes_maintenance_mode') === 'true';
+  return false;
 }
 
 export async function setMaintenanceMode(enabled: boolean): Promise<void> {
-  localStorage.setItem('campusnotes_maintenance_mode', String(enabled));
   if (database) {
-    try {
-      await set(ref(database, 'settings/maintenanceMode'), enabled);
-    } catch (err) {
-      console.warn('Notice setting maintenance mode in RTDB:', err);
-    }
+    await set(ref(database, 'settings/maintenanceMode'), enabled);
   }
   cacheService.clearAll();
 }
 
-export function subscribeToMaintenanceMode(callback: (isMaintenance: boolean) => void): Unsubscribe {
-  callback(localStorage.getItem('campusnotes_maintenance_mode') === 'true');
+export function subscribeToMaintenanceMode(callback: (isMaintenance: boolean) => void): () => void {
+  // Always default to false for public availability unless explicitly confirmed by database
+  callback(false);
   if (!isFirebaseConfigured || !database) {
     return () => {};
   }
@@ -688,12 +834,11 @@ export function subscribeToMaintenanceMode(callback: (isMaintenance: boolean) =>
     settingRef,
     (snapshot: RtdbSnapshot) => {
       const isMaint = snapshot.exists() ? Boolean(snapshot.val()) : false;
-      localStorage.setItem('campusnotes_maintenance_mode', String(isMaint));
       callback(isMaint);
     },
     (err: Error) => {
       console.warn('Maintenance mode listener notice:', err);
-      callback(localStorage.getItem('campusnotes_maintenance_mode') === 'true');
+      callback(false);
     }
   );
 }
@@ -757,7 +902,6 @@ export async function seedStandardCseSem5Subjects(): Promise<void> {
     return;
   }
 
-  // 1. Fetch current subjects in RTDB to check for excluded or duplicate entries
   try {
     const subjectsRef = ref(database, 'subjects');
     const snapshot = await get(subjectsRef);
@@ -773,7 +917,6 @@ export async function seedStandardCseSem5Subjects(): Promise<void> {
           ) || !officialCodes.has((sub.code || '').toUpperCase());
 
         if (isExcluded) {
-          // Remove associated demo materials safely
           try {
             const materialsRef = ref(database, 'materials');
             const q = query(materialsRef, orderByChild('subjectId'), equalTo(id));
@@ -791,7 +934,6 @@ export async function seedStandardCseSem5Subjects(): Promise<void> {
             console.warn(`Cleaned materials for excluded subject ${id}:`, cleanErr);
           }
 
-          // Remove the excluded subject from database
           await remove(ref(database, `subjects/${id}`));
         }
       }
@@ -800,7 +942,6 @@ export async function seedStandardCseSem5Subjects(): Promise<void> {
     console.warn('Notice checking existing subjects before seeding:', err);
   }
 
-  // 2. Save/Upsert the exact nine official CSE Semester 5 subjects
   for (const s of OFFICIAL_CSE_SEM_5_SUBJECTS) {
     await saveSubject(s, false);
   }
@@ -809,7 +950,7 @@ export async function seedStandardCseSem5Subjects(): Promise<void> {
 }
 
 // ==========================================
-// REAL-TIME SUBSCRIPTIONS (Live WebSocket Listeners)
+// REAL-TIME SUBSCRIPTIONS
 // ==========================================
 
 function getSanitizedDefaultSubjects(): Subject[] {
@@ -827,7 +968,6 @@ export type Unsubscribe = () => void;
 
 /**
  * Subscribe in real time to active public subjects
- * Fires immediately with cached/default data and updates when RTDB changes
  */
 export function subscribeToPublicSubjects(
   callback: (subjects: Subject[]) => void,
@@ -866,8 +1006,7 @@ export function subscribeToPublicSubjects(
 }
 
 /**
- * Seed or sync all 62 standard materials (30 assignments + 32 experiments)
- * Safe to rerun without creating duplicates
+ * Seed or sync all standard initial materials
  */
 export async function seedInitialDemoMaterials(): Promise<{ added: number }> {
   if (!database) {
@@ -893,7 +1032,6 @@ export async function seedInitialDemoMaterials(): Promise<{ added: number }> {
 
 /**
  * Subscribe in real time to published public materials
- * Reflects admin uploads, publish/unpublish changes instantly
  */
 export function subscribeToPublicMaterials(
   callback: (materials: StudyMaterial[]) => void,
@@ -1047,4 +1185,3 @@ export function subscribeToSubjectsAdmin(
     }
   );
 }
-

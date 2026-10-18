@@ -126,7 +126,7 @@ export const ReplacePdfModal: React.FC<ReplacePdfModalProps> = ({
         {/* New File Selector */}
         <div>
           <label className="block text-xs font-medium text-slate-700 mb-1">
-            Choose Replacement PDF (Max 25 MB) *
+            Choose Replacement PDF (Max 6 MB) *
           </label>
           <div className="border border-dashed border-slate-300 rounded-lg p-5 text-center hover:border-slate-400 transition-colors bg-white">
             <input
@@ -145,7 +145,7 @@ export const ReplacePdfModal: React.FC<ReplacePdfModalProps> = ({
               <p className="text-[11px] text-slate-400 mt-0.5">
                 {selectedFile
                   ? `New file size: ${formatFileSize(selectedFile.size)}`
-                  : 'Accepts .pdf files only, up to 25 MB'}
+                  : 'Accepts .pdf files only, up to 6 MB for Realtime Database storage'}
               </p>
             </label>
           </div>
@@ -155,7 +155,7 @@ export const ReplacePdfModal: React.FC<ReplacePdfModalProps> = ({
         {uploadProgress !== null && (
           <div className="space-y-1.5 p-3 bg-slate-50 rounded-lg border border-slate-200">
             <div className="flex items-center justify-between text-xs font-medium text-slate-800">
-              <span>Uploading replacement file...</span>
+              <span>Uploading replacement PDF to Realtime Database...</span>
               <span>{uploadProgress}%</span>
             </div>
             <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">

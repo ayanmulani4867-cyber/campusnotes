@@ -32,6 +32,13 @@
       ".read": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
       ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
       ".indexOn": ["subjectId", "category", "academicYear", "createdAt"]
+    },
+    "file_blobs": {
+      "$blobId": {
+        ".read": "root.child('settings').child('maintenanceMode').val() !== true && (data.child('published').val() === true || (auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)))",
+        ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
+        ".validate": "newData.hasChildren(['blob_id', 'material_id', 'file_name', 'file_size_bytes', 'data_base64'])"
+      }
     }
   }
 }

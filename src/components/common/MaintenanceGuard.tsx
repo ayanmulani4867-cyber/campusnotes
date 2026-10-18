@@ -11,11 +11,18 @@ interface MaintenanceGuardProps {
 export const MaintenanceGuard: React.FC<MaintenanceGuardProps> = ({ children }) => {
   const { isAuthenticated } = useAuth();
   const location = useLocation();
-  const [maintenanceMode, setMaintenanceMode] = useState<boolean>(() => {
-    return localStorage.getItem('campusnotes_maintenance_mode') === 'true';
-  });
+
+  // Always default to false - public site should never be locked out by stale local cache
+  const [maintenanceMode, setMaintenanceMode] = useState<boolean>(false);
 
   useEffect(() => {
+    // Clear any stale local storage flags that might have erroneously persisted
+    try {
+      localStorage.removeItem('campusnotes_maintenance_mode');
+    } catch {
+      // Ignore
+    }
+
     const unsub = subscribeToMaintenanceMode((isMaint) => {
       setMaintenanceMode(isMaint);
     });
@@ -24,8 +31,8 @@ export const MaintenanceGuard: React.FC<MaintenanceGuardProps> = ({ children }) 
 
   const isAdminRoute = location.pathname.startsWith('/admin');
 
-  // If maintenance mode is ON and visitor is not an authenticated administrator,
-  // block all public routes and show only the maintenance notice.
+  // Only lock down if maintenance mode is confirmed active by the database
+  // and visitor is not an authenticated administrator
   if (maintenanceMode && !isAuthenticated && !isAdminRoute) {
     return <MaintenanceNotice />;
   }

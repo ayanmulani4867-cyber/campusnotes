@@ -1,30 +1,57 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Download,
   ExternalLink,
-  Maximize2,
   FileText,
   AlertCircle,
   RefreshCw,
 } from 'lucide-react';
 import { StudyMaterial } from '../../types';
+import { fetchPdfBlobUrl } from '../../services/firebaseService';
 
 interface PdfViewerProps {
   material: StudyMaterial;
 }
 
 export const PdfViewer: React.FC<PdfViewerProps> = ({ material }) => {
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fallback Google Docs PDF viewer URL for cross-browser / mobile rendering
-  const googleViewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(
-    material.downloadUrl
-  )}&embedded=true`;
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoading(true);
+    setLoadError(false);
+    setErrorMessage('');
+
+    async function resolve() {
+      try {
+        const url = await fetchPdfBlobUrl(material);
+        if (isMounted) {
+          setResolvedUrl(url);
+          setIsLoading(false);
+        }
+      } catch (err: unknown) {
+        if (isMounted) {
+          setLoadError(true);
+          setErrorMessage(err instanceof Error ? err.message : 'Could not load PDF document.');
+          setIsLoading(false);
+        }
+      }
+    }
+
+    resolve();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [material]);
 
   const handleDownload = () => {
+    if (!resolvedUrl) return;
     const link = document.createElement('a');
-    link.href = material.downloadUrl;
+    link.href = resolvedUrl;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
     link.download = material.fileName || `${material.title}.pdf`;
@@ -32,6 +59,17 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material }) => {
     link.click();
     document.body.removeChild(link);
   };
+
+  const isLocalOrBlob =
+    resolvedUrl?.startsWith('blob:') ||
+    resolvedUrl?.startsWith('/') ||
+    resolvedUrl?.startsWith('data:');
+
+  const viewerSrc = isLocalOrBlob
+    ? (resolvedUrl || '')
+    : resolvedUrl
+    ? `https://docs.google.com/viewer?url=${encodeURIComponent(resolvedUrl)}&embedded=true`
+    : '';
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-sm flex flex-col h-[750px] max-h-[85vh]">
@@ -46,22 +84,25 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material }) => {
 
         <div className="flex items-center gap-2">
           {/* Open direct in new tab */}
-          <a
-            href={material.downloadUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium border border-slate-200 transition-colors"
-            title="Open in new window"
-          >
-            <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
-            <span className="hidden sm:inline">Open Fullscreen</span>
-          </a>
+          {resolvedUrl && (
+            <a
+              href={resolvedUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium border border-slate-200 transition-colors"
+              title="Open in new window"
+            >
+              <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+              <span className="hidden sm:inline">Open Fullscreen</span>
+            </a>
+          )}
 
           {/* Download button */}
           <button
             type="button"
             onClick={handleDownload}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-sm"
+            disabled={!resolvedUrl}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-sm disabled:opacity-50"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Download</span>
@@ -75,7 +116,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material }) => {
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50 z-10">
             <RefreshCw className="w-8 h-8 text-blue-600 animate-spin mb-3" />
             <p className="text-sm font-semibold text-slate-700">Loading PDF document...</p>
-            <p className="text-xs text-slate-400 mt-1">Rendering preview for CSE Semester 5 study material</p>
+            <p className="text-xs text-slate-400 mt-1">Retrieving document from Realtime Database</p>
           </div>
         )}
 
@@ -83,47 +124,52 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material }) => {
           <div className="text-center p-6 max-w-md">
             <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-3" />
             <h4 className="text-base font-bold text-slate-900 mb-1">
-              Inline Preview Unavailable
+              Document Preview Unavailable
             </h4>
             <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-              Your browser or network prevented the inline PDF reader from displaying. You can open or download the document directly below.
+              {errorMessage ||
+                'Your browser or network prevented the inline PDF reader from displaying. You can download the document directly below.'}
             </p>
-            <div className="flex items-center justify-center gap-3">
-              <a
-                href={material.downloadUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-xl hover:bg-blue-700 transition-colors"
-              >
-                Open in Browser Tab
-              </a>
-              <button
-                type="button"
-                onClick={handleDownload}
-                className="px-4 py-2 bg-slate-200 text-slate-800 text-xs font-semibold rounded-xl hover:bg-slate-300 transition-colors"
-              >
-                Download PDF
-              </button>
-            </div>
+            {resolvedUrl && (
+              <div className="flex items-center justify-center gap-3">
+                <a
+                  href={resolvedUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-xl hover:bg-blue-700 transition-colors"
+                >
+                  Open in Browser Tab
+                </a>
+                <button
+                  type="button"
+                  onClick={handleDownload}
+                  className="px-4 py-2 bg-slate-200 text-slate-800 text-xs font-semibold rounded-xl hover:bg-slate-300 transition-colors"
+                >
+                  Download PDF
+                </button>
+              </div>
+            )}
           </div>
         ) : (
-          <iframe
-            src={googleViewerUrl}
-            title={material.title}
-            className="w-full h-full border-0"
-            onLoad={() => setIsLoading(false)}
-            onError={() => {
-              setIsLoading(false);
-              setLoadError(true);
-            }}
-          />
+          viewerSrc && (
+            <iframe
+              src={viewerSrc}
+              title={material.title}
+              className="w-full h-full border-0"
+              onLoad={() => setIsLoading(false)}
+              onError={() => {
+                setIsLoading(false);
+                setLoadError(true);
+              }}
+            />
+          )
         )}
       </div>
 
       {/* Viewer Footer Status */}
       <div className="px-4 py-2 bg-white border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-400">
         <span>Verified Academic Document • CSE Semester 5</span>
-        <span>Secure Cloud Storage Delivery</span>
+        <span>Realtime Database Secure Delivery</span>
       </div>
     </div>
   );

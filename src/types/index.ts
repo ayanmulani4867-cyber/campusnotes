@@ -128,11 +128,23 @@ export interface StudyMaterial {
   fileName: string;
   storagePath: string;
   downloadUrl: string;
+  blobId?: string; // Reference to RTDB /file_blobs/{blobId}
   fileSize: number; // in bytes
   published: boolean;
   createdAt: number;
   updatedAt: number;
   createdBy?: string;
+}
+
+export interface FileBlobRecord {
+  blob_id: string;
+  material_id: string;
+  file_name: string;
+  file_size_bytes: number;
+  mime_type: string;
+  data_base64: string;
+  published: boolean;
+  created_at: number;
 }
 
 export interface MaterialFilterState {

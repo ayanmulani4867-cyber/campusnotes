@@ -18,6 +18,7 @@ import {
   getPublicMaterialById,
   getPublicSubjects,
   getPublicMaterialsBySubject,
+  fetchPdfBlobUrl,
 } from '../services/firebaseService';
 import { PdfViewer } from '../components/materials/PdfViewer';
 import { MaterialCard, formatFileSize, formatDate } from '../components/materials/MaterialCard';
@@ -32,6 +33,7 @@ export const MaterialDetailPage: React.FC = () => {
   const [subject, setSubject] = useState<Subject | null>(null);
   const [relatedMaterials, setRelatedMaterials] = useState<StudyMaterial[]>([]);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -71,16 +73,24 @@ export const MaterialDetailPage: React.FC = () => {
     setTimeout(() => setCopied(false), 3000);
   };
 
-  const handleDownload = () => {
-    if (!material) return;
-    const link = document.createElement('a');
-    link.href = material.downloadUrl;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    link.download = material.fileName || `${material.title}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleDownload = async () => {
+    if (!material || downloading) return;
+    try {
+      setDownloading(true);
+      const url = await fetchPdfBlobUrl(material);
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.download = material.fileName || `${material.title}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err: unknown) {
+      toast.error('Download Failed', err instanceof Error ? err.message : String(err));
+    } finally {
+      setDownloading(false);
+    }
   };
 
   if (loading) {
@@ -193,10 +203,20 @@ export const MaterialDetailPage: React.FC = () => {
               <button
                 type="button"
                 onClick={handleDownload}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                disabled={downloading}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-60"
               >
-                <Download className="w-3.5 h-3.5" />
-                <span>Download PDF</span>
+                {downloading ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Preparing PDF...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download PDF</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
