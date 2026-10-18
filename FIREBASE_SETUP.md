@@ -131,25 +131,29 @@ The frontend automatically resolves `admin` to `admin@campusnotes.internal` and 
   "rules": {
     "admins": {
       ".read": "auth != null",
-      ".write": false
+      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)"
+    },
+    "settings": {
+      ".read": true,
+      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)"
     },
     "subjects": {
-      ".read": true,
-      ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
+      ".read": "root.child('settings').child('maintenanceMode').val() !== true || (auth != null && (auth.token.email === 'admin@campusnotes.internal' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true))",
+      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
       ".indexOn": ["code", "active"]
     },
     "categories": {
       ".read": true,
-      ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)"
+      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)"
     },
     "publicMaterials": {
-      ".read": true,
-      ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
+      ".read": "root.child('settings').child('maintenanceMode').val() !== true",
+      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
       ".indexOn": ["subjectId", "category", "academicYear", "createdAt"]
     },
     "materials": {
-      ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
-      ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
+      ".read": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
+      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
       ".indexOn": ["subjectId", "category", "academicYear", "createdAt"]
     }
   }

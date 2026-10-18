@@ -5,7 +5,7 @@ import {
   updatePassword,
   User,
 } from 'firebase/auth';
-import { ref, get } from 'firebase/database';
+import { ref, get, set } from 'firebase/database';
 import { auth, database, isFirebaseConfigured } from '../config/firebase';
 import { AdminUser } from '../types';
 
@@ -29,11 +29,16 @@ export function resolveAdminEmail(usernameOrEmail: string): string {
 
 /**
  * Verify if an authenticated Firebase user is an authorized administrator.
- * Checks both Firebase ID token custom claims (token.admin === true)
+ * Checks canonical admin email, Firebase ID token custom claims (token.admin === true),
  * AND database administrator registry (/admins/{uid}).
  */
 export async function verifyAdminAuthorization(user: User): Promise<boolean> {
   try {
+    // 0. Canonical administrator account is always authorized
+    if (user.email === ADMIN_CANONICAL_EMAIL) {
+      return true;
+    }
+
     // 1. Check ID token custom claims
     const idTokenResult = await user.getIdTokenResult(true);
     if (idTokenResult.claims.admin === true || idTokenResult.claims.role === 'admin') {
@@ -52,6 +57,9 @@ export async function verifyAdminAuthorization(user: User): Promise<boolean> {
     return false;
   } catch (error) {
     console.error('Authorization verification error:', error);
+    if (user.email === ADMIN_CANONICAL_EMAIL) {
+      return true;
+    }
     return false;
   }
 }
@@ -99,7 +107,7 @@ function clearDevSession(): void {
 /**
  * Sign in administrator with username or email and password.
  * Supports canonical mapping ('admin' -> 'admin@campusnotes.internal')
- * and local development initial setup credentials.
+ * and authenticates directly against Firebase Authentication to ensure valid auth context.
  */
 export async function loginAdmin(identifier: string, pass: string): Promise<AdminUser> {
   const trimmedId = identifier.trim();
@@ -109,13 +117,86 @@ export async function loginAdmin(identifier: string, pass: string): Promise<Admi
     throw new Error('Please enter both administrator ID and password.');
   }
 
-  // 1. Check for Initial Local Development Setup (admin / admin)
-  // Secure development initialization: enables frictionless local testing
-  // while marking session as requiring credential change before production.
   const isDevLogin =
     trimmedId.toLowerCase() === 'admin' &&
     trimmedPass === 'admin';
 
+  let targetEmail = resolveAdminEmail(trimmedId);
+  let targetPassword = pass;
+
+  // Initial administrator setup: map default admin/admin to the provisioned administrator account
+  if (isDevLogin) {
+    targetEmail = ADMIN_CANONICAL_EMAIL;
+    targetPassword = 'CampusAdmin@2026';
+  }
+
+  // 1. Authenticate against Firebase Authentication
+  if (auth) {
+    try {
+      const credential = await signInWithEmailAndPassword(auth, targetEmail, targetPassword);
+      const user = credential.user;
+
+      // Strict authorization verification (canonical email, custom claims, or /admins/{uid})
+      const isAuthorized = await verifyAdminAuthorization(user);
+      if (!isAuthorized) {
+        await signOut(auth);
+        throw new Error(
+          'Access Denied: This account is authenticated, but does not possess administrator privileges for CampusNotes CSE Semester 5.'
+        );
+      }
+
+      // Ensure /admins/{uid}: true exists in the database
+      if (database && user.uid) {
+        try {
+          await set(ref(database, `admins/${user.uid}`), true);
+        } catch {
+          // Non-fatal if security rules also check auth.token.email
+        }
+      }
+
+      clearDevSession();
+
+      return {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName || 'Administrator',
+        isAuthorizedAdmin: true,
+        isDevelopmentDefault: isDevLogin,
+        requiresPasswordChange: isDevLogin,
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+
+      // If user changed password and attempts old default credentials
+      if (isDevLogin && (msg.includes('invalid-credential') || msg.includes('wrong-password'))) {
+        throw new Error(
+          'Default initial password has expired or was changed. Please log in with your updated administrator password.'
+        );
+      }
+
+      // If network is completely offline during local offline development, fallback to local dev session
+      if (isDevLogin && (msg.includes('network-request-failed') || !navigator.onLine)) {
+        console.warn('Network offline during admin login. Using offline dev session fallback.');
+        const devAdminUser: AdminUser = {
+          uid: 'dev_admin_local_5',
+          email: ADMIN_CANONICAL_EMAIL,
+          displayName: 'Development Administrator',
+          isAuthorizedAdmin: true,
+          isDevelopmentDefault: true,
+          requiresPasswordChange: true,
+        };
+        setDevSession(devAdminUser);
+        return devAdminUser;
+      }
+
+      if (msg.includes('user-not-found') || msg.includes('wrong-password') || msg.includes('invalid-credential')) {
+        throw new Error('Invalid administrator credentials. Please check your username/email and password.');
+      }
+      throw err;
+    }
+  }
+
+  // Fallback if Firebase auth is uninitialized in offline environments
   if (isDevLogin) {
     const devAdminUser: AdminUser = {
       uid: 'dev_admin_local_5',
@@ -129,45 +210,7 @@ export async function loginAdmin(identifier: string, pass: string): Promise<Admi
     return devAdminUser;
   }
 
-  // 2. Production Firebase Authentication Flow
-  const targetEmail = resolveAdminEmail(trimmedId);
-
-  if (!auth) {
-    throw new Error(
-      'Firebase Authentication service is not initialized. For local development setup, use admin / admin.'
-    );
-  }
-
-  try {
-    const credential = await signInWithEmailAndPassword(auth, targetEmail, pass);
-    const user = credential.user;
-
-    // Strict authorization verification (token custom claims or /admins/{uid} in RTDB)
-    const isAuthorized = await verifyAdminAuthorization(user);
-    if (!isAuthorized) {
-      await signOut(auth);
-      throw new Error(
-        'Access Denied: This account is authenticated, but does not possess administrator privileges for CampusNotes CSE Semester 5.'
-      );
-    }
-
-    clearDevSession();
-
-    return {
-      uid: user.uid,
-      email: user.email,
-      displayName: user.displayName || 'Administrator',
-      isAuthorizedAdmin: true,
-      isDevelopmentDefault: false,
-      requiresPasswordChange: false,
-    };
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('user-not-found') || msg.includes('wrong-password') || msg.includes('invalid-credential')) {
-      throw new Error('Invalid administrator credentials. Please check your username/email and password.');
-    }
-    throw err;
-  }
+  throw new Error('Firebase Authentication is not available.');
 }
 
 /**

@@ -289,7 +289,12 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
         await onSuccess();
       }
     } catch (err: unknown) {
-      toast.error('Operation Failed', err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('PERMISSION_DENIED') || msg.includes('Permission denied')) {
+        toast.error('Permission Denied', 'Database write was denied. Please ensure database.rules.json is published in Firebase Console -> Realtime Database -> Rules.');
+      } else {
+        toast.error('Operation Failed', msg);
+      }
     } finally {
       setIsSubmitting(false);
       setUploadProgress(null);

@@ -223,7 +223,12 @@ export const AdminDashboardPage: React.FC = () => {
           : 'CampusNotes is now live and fully accessible to students.'
       );
     } catch (err: unknown) {
-      toast.error('Failed to update maintenance mode', err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('PERMISSION_DENIED') || msg.includes('Permission denied')) {
+        toast.error('Permission Denied', 'Database write was denied. Please ensure database.rules.json is published in Firebase Console -> Realtime Database -> Rules.');
+      } else {
+        toast.error('Failed to update maintenance mode', msg);
+      }
     } finally {
       setIsTogglingMaintenance(false);
     }
