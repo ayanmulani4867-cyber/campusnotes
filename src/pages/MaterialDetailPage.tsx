@@ -19,6 +19,7 @@ import {
   getPublicSubjects,
   getPublicMaterialsBySubject,
   fetchPdfBlobUrl,
+  downloadStudyMaterial,
 } from '../services/firebaseService';
 import { PdfViewer } from '../components/materials/PdfViewer';
 import { MaterialCard, formatFileSize, formatDate } from '../components/materials/MaterialCard';
@@ -77,15 +78,8 @@ export const MaterialDetailPage: React.FC = () => {
     if (!material || downloading) return;
     try {
       setDownloading(true);
-      const url = await fetchPdfBlobUrl(material);
-      const link = document.createElement('a');
-      link.href = url;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      link.download = material.fileName || `${material.title}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      await downloadStudyMaterial(material);
+      toast.success('Download Complete', 'PDF document downloaded successfully.');
     } catch (err: unknown) {
       toast.error('Download Failed', err instanceof Error ? err.message : String(err));
     } finally {

@@ -7,17 +7,20 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { StudyMaterial } from '../../types';
-import { fetchPdfBlobUrl } from '../../services/firebaseService';
+import { fetchPdfBlobUrl, downloadStudyMaterial } from '../../services/firebaseService';
+import { useToast } from '../../context/ToastContext';
 
 interface PdfViewerProps {
   material: StudyMaterial;
 }
 
 export const PdfViewer: React.FC<PdfViewerProps> = ({ material }) => {
+  const toast = useToast();
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -48,16 +51,17 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material }) => {
     };
   }, [material]);
 
-  const handleDownload = () => {
-    if (!resolvedUrl) return;
-    const link = document.createElement('a');
-    link.href = resolvedUrl;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    link.download = material.fileName || `${material.title}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleDownload = async () => {
+    if (downloading) return;
+    try {
+      setDownloading(true);
+      await downloadStudyMaterial(material);
+      toast.success('Download Complete', `"${material.fileName || material.title}" downloaded.`);
+    } catch (err: unknown) {
+      toast.error('Download Failed', err instanceof Error ? err.message : String(err));
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const isLocalOrBlob =
@@ -101,11 +105,15 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material }) => {
           <button
             type="button"
             onClick={handleDownload}
-            disabled={!resolvedUrl}
+            disabled={downloading}
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-sm disabled:opacity-50"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>Download</span>
+            {downloading ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Download className="w-3.5 h-3.5" />
+            )}
+            <span>{downloading ? 'Downloading...' : 'Download'}</span>
           </button>
         </div>
       </div>
@@ -130,8 +138,8 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material }) => {
               {errorMessage ||
                 'Your browser or network prevented the inline PDF reader from displaying. You can download the document directly below.'}
             </p>
-            {resolvedUrl && (
-              <div className="flex items-center justify-center gap-3">
+            <div className="flex items-center justify-center gap-3">
+              {resolvedUrl && (
                 <a
                   href={resolvedUrl}
                   target="_blank"
@@ -140,15 +148,16 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material }) => {
                 >
                   Open in Browser Tab
                 </a>
-                <button
-                  type="button"
-                  onClick={handleDownload}
-                  className="px-4 py-2 bg-slate-200 text-slate-800 text-xs font-semibold rounded-xl hover:bg-slate-300 transition-colors"
-                >
-                  Download PDF
-                </button>
-              </div>
-            )}
+              )}
+              <button
+                type="button"
+                onClick={handleDownload}
+                disabled={downloading}
+                className="px-4 py-2 bg-slate-200 text-slate-800 text-xs font-semibold rounded-xl hover:bg-slate-300 transition-colors disabled:opacity-50"
+              >
+                {downloading ? 'Downloading...' : 'Download PDF'}
+              </button>
+            </div>
           </div>
         ) : (
           viewerSrc && (

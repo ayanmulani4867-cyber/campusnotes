@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   FileText,
@@ -8,8 +8,11 @@ import {
   HardDrive,
   Hash,
   Tag,
+  RefreshCw,
 } from 'lucide-react';
 import { StudyMaterial, Subject, CATEGORIES } from '../../types';
+import { downloadStudyMaterial } from '../../services/firebaseService';
+import { useToast } from '../../context/ToastContext';
 
 interface MaterialCardProps {
   material: StudyMaterial;
@@ -38,6 +41,9 @@ export const MaterialCard: React.FC<MaterialCardProps> = ({
   material,
   subject,
 }) => {
+  const toast = useToast();
+  const [downloading, setDownloading] = useState(false);
+
   const categoryMeta = CATEGORIES.find((c) => c.id === material.category) || {
     id: material.category,
     name: material.category,
@@ -45,17 +51,18 @@ export const MaterialCard: React.FC<MaterialCardProps> = ({
     badgeColor: 'bg-slate-100 text-slate-700 border-slate-200',
   };
 
-  const handleDownload = (e: React.MouseEvent) => {
+  const handleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    // Use target=_blank and download attribute
-    const link = document.createElement('a');
-    link.href = material.downloadUrl;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    link.download = material.fileName || `${material.title}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    if (downloading) return;
+    try {
+      setDownloading(true);
+      await downloadStudyMaterial(material);
+      toast.success('Download Complete', `"${material.fileName || material.title}" downloaded.`);
+    } catch (err: unknown) {
+      toast.error('Download Failed', err instanceof Error ? err.message : String(err));
+    } finally {
+      setDownloading(false);
+    }
   };
 
   return (
@@ -160,10 +167,15 @@ export const MaterialCard: React.FC<MaterialCardProps> = ({
           <button
             type="button"
             onClick={handleDownload}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+            disabled={downloading}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>Download</span>
+            {downloading ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Download className="w-3.5 h-3.5" />
+            )}
+            <span>{downloading ? 'Downloading...' : 'Download'}</span>
           </button>
         </div>
       </div>

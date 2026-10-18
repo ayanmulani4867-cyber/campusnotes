@@ -322,6 +322,42 @@ export async function getMaterialPdfBlob(blobId: string): Promise<FileBlobRecord
 }
 
 /**
+ * Helper to safely extract blob ID from any material object representation
+ */
+export function extractBlobId(
+  material?: { blobId?: string; storagePath?: string; downloadUrl?: string } | null
+): string | null {
+  if (!material) return null;
+  if (material.blobId && typeof material.blobId === 'string' && material.blobId.trim()) {
+    return material.blobId.trim();
+  }
+  if (material.storagePath && typeof material.storagePath === 'string') {
+    if (material.storagePath.startsWith('rtdb://file_blobs/')) {
+      return material.storagePath.replace('rtdb://file_blobs/', '').trim();
+    }
+    if (material.storagePath.startsWith('rtdb://')) {
+      return material.storagePath.replace('rtdb://', '').trim();
+    }
+  }
+  if (material.downloadUrl && typeof material.downloadUrl === 'string') {
+    if (material.downloadUrl.startsWith('rtdb://file_blobs/')) {
+      return material.downloadUrl.replace('rtdb://file_blobs/', '').trim();
+    }
+    if (material.downloadUrl.startsWith('rtdb://')) {
+      return material.downloadUrl.replace('rtdb://', '').trim();
+    }
+  }
+  return null;
+}
+
+/**
+ * Sanitizes a filename for cross-platform file saving
+ */
+export function sanitizeFilename(name: string): string {
+  return name.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_');
+}
+
+/**
  * Resolves a preview and download URL for any material.
  * - If stored as Base64 in RTDB (/file_blobs/): fetches on demand, decodes to Blob, creates a blob: URL.
  * - If legacy URL (/demo-pdfs/ or external HTTP): returns the URL directly.
@@ -333,9 +369,23 @@ export async function fetchPdfBlobUrl(material: StudyMaterial): Promise<string> 
   }
 
   // 2. Resolve blobId from material metadata
-  let blobId = material.blobId;
-  if (!blobId && material.storagePath && material.storagePath.startsWith('rtdb://file_blobs/')) {
-    blobId = material.storagePath.replace('rtdb://file_blobs/', '');
+  let blobId = extractBlobId(material);
+
+  // If blobId wasn't found in current object, check the database for fresh metadata
+  if (!blobId && database && material.id) {
+    try {
+      const pubSnap = await get(ref(database, `publicMaterials/${material.id}`));
+      if (pubSnap.exists()) {
+        blobId = extractBlobId(pubSnap.val());
+      } else {
+        const matSnap = await get(ref(database, `materials/${material.id}`)).catch(() => null);
+        if (matSnap && matSnap.exists()) {
+          blobId = extractBlobId(matSnap.val());
+        }
+      }
+    } catch {
+      // Ignore network fallback error
+    }
   }
 
   if (blobId) {
@@ -359,6 +409,102 @@ export async function fetchPdfBlobUrl(material: StudyMaterial): Promise<string> 
   }
 
   throw new Error('PDF document content could not be located in Realtime Database.');
+}
+
+/**
+ * Safely downloads a study material for public or admin users:
+ * 1. Fetches latest published material metadata directly from RTDB to guarantee fresh blobId (bypassing stale cache).
+ * 2. If it's a local demo PDF (/demo-pdfs/...), downloads directly.
+ * 3. Extracts current blobId (from blobId, storagePath, or downloadUrl).
+ * 4. Fetches file blob record from /file_blobs/{blobId}.
+ * 5. Decodes Base64 data into binary PDF bytes.
+ * 6. Creates a temporary Blob URL (application/pdf).
+ * 7. Triggers programmatic browser download without popup blockers (no target=_blank).
+ * 8. Schedules cleanup of temporary Blob URL after download completes.
+ */
+export async function downloadStudyMaterial(
+  materialInput: StudyMaterial,
+  onProgress?: (status: string) => void
+): Promise<void> {
+  // Step 1: Ensure we have the freshest material metadata directly from RTDB
+  let freshMaterial = materialInput;
+  if (database && materialInput.id) {
+    try {
+      const pubSnap = await get(ref(database, `publicMaterials/${materialInput.id}`));
+      if (pubSnap.exists()) {
+        freshMaterial = { ...materialInput, ...pubSnap.val() };
+      } else {
+        const privSnap = await get(ref(database, `materials/${materialInput.id}`)).catch(() => null);
+        if (privSnap && privSnap.exists()) {
+          freshMaterial = { ...materialInput, ...privSnap.val() };
+        }
+      }
+    } catch {
+      // Proceed with passed materialInput if RTDB read fails
+    }
+  }
+
+  // Step 2: Handle static demo PDFs (/demo-pdfs/...)
+  if (freshMaterial.downloadUrl && freshMaterial.downloadUrl.startsWith('/demo-pdfs/')) {
+    const link = document.createElement('a');
+    link.href = freshMaterial.downloadUrl;
+    link.download = freshMaterial.fileName || `${sanitizeFilename(freshMaterial.title)}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    return;
+  }
+
+  // Step 3: Handle external HTTP URLs
+  if (freshMaterial.downloadUrl && freshMaterial.downloadUrl.startsWith('http')) {
+    const link = document.createElement('a');
+    link.href = freshMaterial.downloadUrl;
+    link.download = freshMaterial.fileName || `${sanitizeFilename(freshMaterial.title)}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    return;
+  }
+
+  // Step 4: Resolve blob ID
+  const blobId = extractBlobId(freshMaterial);
+  if (!blobId) {
+    throw new Error('This study material does not have an associated PDF document in the database.');
+  }
+
+  onProgress?.('Fetching PDF from database...');
+
+  // Step 5: Fetch blob from RTDB /file_blobs/{blobId}
+  const blobRecord = await getMaterialPdfBlob(blobId);
+  if (!blobRecord || !blobRecord.data_base64) {
+    throw new Error('The requested PDF document could not be retrieved from the database or access was denied.');
+  }
+
+  onProgress?.('Preparing file download...');
+
+  // Step 6: Decode Base64 to binary PDF Blob
+  const pdfBlob = base64ToBlob(blobRecord.data_base64, blobRecord.mime_type || 'application/pdf');
+
+  // Step 7: Create object URL and trigger browser download
+  const blobUrl = URL.createObjectURL(pdfBlob);
+  const safeFilename = freshMaterial.fileName || blobRecord.file_name || `${sanitizeFilename(freshMaterial.title)}.pdf`;
+
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = safeFilename;
+  // NOTE: Do not use target="_blank" as it causes popup blocker violations after async operations
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  // Step 8: Revoke temporary Blob URL after generous timeout
+  setTimeout(() => {
+    try {
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      // Ignore
+    }
+  }, 30000);
 }
 
 // ==========================================
@@ -674,11 +820,14 @@ export async function updateMaterial(
 
 /**
  * Replace material PDF safely:
- * 1. Uploads replacement to RTDB under a new versioned blobId.
- * 2. Verifies the replacement blob exists and is readable.
- * 3. Atomically updates database metadata with new file details and form changes.
- * 4. Deletes the old blob only after metadata update confirms AND only if not shared.
- * 5. Cleans up the new blob if metadata update fails (rollback).
+ * 1. Fetches current material from RTDB to ensure fresh metadata and accurate old blob ID.
+ * 2. Uploads replacement to RTDB under a new versioned blobId.
+ * 3. Reads back the replacement blob and verifies Base64 and valid %PDF- header.
+ * 4. Atomically updates database metadata in /materials, /publicMaterials, and blob published flag.
+ * 5. Verifies metadata in RTDB now points to the new blobId.
+ * 6. Invalidates caches (sessionStorage and in-memory Blob URL cache).
+ * 7. Deletes the old blob only after metadata confirms AND only if not shared.
+ * 8. Cleans up the new blob if metadata update or verification fails (rollback).
  */
 export async function replaceMaterialPdf(
   material: StudyMaterial,
@@ -700,46 +849,96 @@ export async function replaceMaterialPdf(
     additionalMetadataUpdates = additionalMetadataOrProgress;
   }
 
-  const oldBlobId = material.blobId;
+  // 1. Fetch current material from RTDB to ensure we have fresh metadata and accurate old blob ID
+  let currentMaterial = material;
+  try {
+    const currentSnap = await get(ref(database, `materials/${material.id}`));
+    if (currentSnap.exists()) {
+      currentMaterial = { ...currentMaterial, ...currentSnap.val() };
+    }
+  } catch (fetchErr) {
+    console.warn('Could not read existing material record before replacement:', fetchErr);
+  }
+
+  const oldBlobId = extractBlobId(currentMaterial) || extractBlobId(material);
   const isPublished =
     additionalMetadataUpdates?.published !== undefined
       ? additionalMetadataUpdates.published
-      : material.published;
+      : (currentMaterial.published ?? material.published ?? true);
 
-  // 1. Upload replacement PDF to RTDB under new versioned blobId
+  // 2. Upload replacement PDF to RTDB under new versioned blobId
   const uploadResult = await uploadPdfFile(
     newFile,
-    additionalMetadataUpdates?.subjectId || material.subjectId,
+    additionalMetadataUpdates?.subjectId || currentMaterial.subjectId || material.subjectId,
     material.id,
     progressCb,
     isPublished
   );
 
   try {
-    // 2. Verify that the new blob was written and can be read back
-    const verifyBlob = await get(ref(database, `file_blobs/${uploadResult.blobId}`));
-    if (!verifyBlob.exists()) {
+    // 3. Read the blob back and verify it is valid Base64 and decodes to a valid PDF
+    const verifyBlobSnap = await get(ref(database, `file_blobs/${uploadResult.blobId}`));
+    if (!verifyBlobSnap.exists()) {
       throw new Error('Verification failed: Replacement PDF blob could not be confirmed in database.');
     }
+    const verifiedBlob = verifyBlobSnap.val() as FileBlobRecord;
+    if (!verifiedBlob || !verifiedBlob.data_base64 || verifiedBlob.data_base64.length < 10) {
+      throw new Error('Verification failed: Replacement PDF blob has empty or corrupted data.');
+    }
+    try {
+      const headerSample = atob(verifiedBlob.data_base64.slice(0, 64));
+      if (!headerSample.startsWith('%PDF-')) {
+        throw new Error('Verification failed: Decoded replacement data does not match PDF signature (%PDF-).');
+      }
+    } catch (decodeErr) {
+      throw new Error(`Verification failed: Decoded replacement data is not valid Base64 PDF: ${decodeErr}`);
+    }
 
-    // 3. Atomically update material metadata in /materials and /publicMaterials
-    const updates: Partial<StudyMaterial> = {
+    // 4. Atomically update material metadata in /materials, /publicMaterials, and blob published flag
+    const now = Date.now();
+    const merged: StudyMaterial = {
+      ...currentMaterial,
       ...additionalMetadataUpdates,
       fileName: uploadResult.fileName,
       storagePath: uploadResult.storagePath,
       downloadUrl: uploadResult.downloadUrl,
       blobId: uploadResult.blobId,
       fileSize: uploadResult.fileSize,
+      published: isPublished,
+      updatedAt: now,
     };
 
-    await updateMaterial(material.id, updates, material);
+    const updates: Record<string, unknown> = {};
+    updates[`materials/${material.id}`] = merged;
+    if (isPublished) {
+      updates[`publicMaterials/${material.id}`] = merged;
+    } else {
+      updates[`publicMaterials/${material.id}`] = null;
+    }
+    updates[`file_blobs/${uploadResult.blobId}/published`] = isPublished;
 
-    // 4. Invalidate old cached blob URL if any
+    await update(ref(database), updates);
+
+    // 5. Confirm the metadata in RTDB references the new blob
+    const checkMetaSnap = await get(ref(database, `materials/${material.id}`));
+    if (!checkMetaSnap.exists() || checkMetaSnap.val()?.blobId !== uploadResult.blobId) {
+      throw new Error('Verification failed: Material metadata was not updated with new blob reference.');
+    }
+    if (isPublished) {
+      const checkPubSnap = await get(ref(database, `publicMaterials/${material.id}`));
+      if (!checkPubSnap.exists() || checkPubSnap.val()?.blobId !== uploadResult.blobId) {
+        throw new Error('Verification failed: Public material metadata was not updated with new blob reference.');
+      }
+    }
+
+    // 6. Invalidate caches (sessionStorage and in-memory Blob URL cache)
+    cacheService.clearAll();
     if (oldBlobId) {
       revokeBlobUrl(oldBlobId);
     }
+    revokeBlobUrl(uploadResult.blobId);
 
-    // 5. Remove old blob only after metadata update succeeds and if not shared
+    // 7. Remove old blob only after replacement is confirmed accessible and if not shared
     if (oldBlobId && oldBlobId !== uploadResult.blobId) {
       const isShared = await isBlobReferencedByOthers(oldBlobId, material.id);
       if (!isShared) {
@@ -755,7 +954,7 @@ export async function replaceMaterialPdf(
       blobId: uploadResult.blobId,
     };
   } catch (err) {
-    // Rollback: if updating metadata failed, cleanup the new uploaded blob to avoid orphans
+    // Rollback: if updating metadata or verification failed, clean up the new uploaded blob to avoid orphans
     try {
       await remove(ref(database, `file_blobs/${uploadResult.blobId}`));
     } catch {
