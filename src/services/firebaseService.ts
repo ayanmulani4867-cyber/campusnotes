@@ -31,6 +31,7 @@ import {
 } from '../constants/subjects';
 import { INITIAL_DEMO_MATERIALS } from '../constants/initialMaterials';
 import { cacheService } from './cacheService';
+import { compareMaterialsAscending } from '../utils/materialSorting';
 
 /**
  * Realtime Database limits a single node/leaf string to 10 MB.
@@ -212,7 +213,7 @@ export async function getPublicMaterials(limit = 100): Promise<StudyMaterial[]> 
           ...data[id],
           id,
         }));
-        materials.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        materials.sort(compareMaterialsAscending);
       }
     } catch (err: unknown) {
       console.warn('Notice reading public materials from RTDB:', err);
@@ -281,7 +282,7 @@ export async function getPublicMaterialsBySubject(subjectId: string): Promise<St
           ...data[id],
           id,
         }));
-        materials.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        materials.sort(compareMaterialsAscending);
       }
     } catch (err) {
       console.warn(`Notice fetching materials for subject ${subjectId} from RTDB:`, err);
@@ -623,7 +624,7 @@ export async function getAllMaterialsAdmin(): Promise<StudyMaterial[]> {
 
     if (list.length === 0) return INITIAL_DEMO_MATERIALS;
 
-    list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    list.sort(compareMaterialsAscending);
     return list;
   } catch (err: unknown) {
     console.warn('Notice reading admin materials from RTDB, using demo catalog:', err);
@@ -1255,7 +1256,7 @@ export function subscribeToPublicMaterials(
           ...data[id],
           id,
         }));
-        materials.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        materials.sort(compareMaterialsAscending);
       }
       if (materials.length === 0) {
         materials = INITIAL_DEMO_MATERIALS.slice(0, limit);
@@ -1297,7 +1298,7 @@ export function subscribeToSubjectMaterials(
           ...data[id],
           id,
         }));
-        materials.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        materials.sort(compareMaterialsAscending);
       }
       if (materials.length === 0) {
         materials = INITIAL_DEMO_MATERIALS.filter((m) => m.subjectId === subjectId);
@@ -1335,7 +1336,7 @@ export function subscribeToMaterialsAdmin(
           ...data[id],
           id,
         }));
-        list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        list.sort(compareMaterialsAscending);
       }
       if (list.length === 0) {
         list = INITIAL_DEMO_MATERIALS;

@@ -10,6 +10,7 @@ import { MaterialFilter } from '../components/materials/MaterialFilter';
 import { MaterialCardSkeleton } from '../components/common/Skeleton';
 import { EmptyState } from '../components/common/EmptyState';
 import { FileText, RefreshCw } from 'lucide-react';
+import { compareMaterialsAscending } from '../utils/materialSorting';
 
 export const MaterialsPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -141,13 +142,10 @@ export const MaterialsPage: React.FC = () => {
         if (filters.sortBy === 'oldest') {
           return (a.createdAt || 0) - (b.createdAt || 0);
         }
-        if (filters.sortBy === 'title') {
-          return a.title.localeCompare(b.title);
-        }
         if (filters.sortBy === 'size') {
           return (b.fileSize || 0) - (a.fileSize || 0);
         }
-        return 0;
+        return compareMaterialsAscending(a, b);
       });
   }, [materials, subjects, filters]);
 

@@ -14,12 +14,12 @@ import {
   subscribeToPublicMaterials,
   subscribeToPublicSubjects,
 } from '../services/firebaseService';
+import { sortStudyMaterialsAscending } from '../utils/materialSorting';
 import { MaterialCard } from '../components/materials/MaterialCard';
 import {
   MaterialCardSkeleton,
   SubjectCardSkeleton,
 } from '../components/common/Skeleton';
-import { EmptyState } from '../components/common/EmptyState';
 
 export const HomePage: React.FC = () => {
   const [materials, setMaterials] = useState<StudyMaterial[]>([]);
@@ -39,7 +39,7 @@ export const HomePage: React.FC = () => {
         setMaterials(data);
         setLoading(false);
       },
-      20,
+      100,
       (err) => {
         console.warn('Home materials listener notice:', err);
         if (isMounted) setLoading(false);
@@ -71,8 +71,11 @@ export const HomePage: React.FC = () => {
   };
 
   const filteredMaterials = useMemo(() => {
-    if (selectedCategory === 'all') return materials.slice(0, 8);
-    return materials.filter((m) => m.category === selectedCategory).slice(0, 8);
+    const list =
+      selectedCategory === 'all'
+        ? materials
+        : materials.filter((m) => m.category === selectedCategory);
+    return sortStudyMaterialsAscending(list).slice(0, 12);
   }, [materials, selectedCategory]);
 
   return (

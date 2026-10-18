@@ -15,6 +15,7 @@ import { OFFICIAL_CSE_SEM_5_SUBJECTS } from '../constants/subjects';
 import { MaterialCard } from '../components/materials/MaterialCard';
 import { MaterialCardSkeleton } from '../components/common/Skeleton';
 import { EmptyState } from '../components/common/EmptyState';
+import { sortStudyMaterialsAscending } from '../utils/materialSorting';
 
 export const CategoryPage: React.FC = () => {
   const { categorySlug } = useParams<{ categorySlug: string }>();
@@ -67,7 +68,7 @@ export const CategoryPage: React.FC = () => {
   const filteredMaterials = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
 
-    return materials.filter((m) => {
+    const filtered = materials.filter((m) => {
       if (!m.published) return false;
       if (m.category !== categorySlug) return false;
       if (selectedSubjectId && m.subjectId !== selectedSubjectId) return false;
@@ -86,6 +87,7 @@ export const CategoryPage: React.FC = () => {
 
       return true;
     });
+    return sortStudyMaterialsAscending(filtered);
   }, [materials, categorySlug, selectedSubjectId, searchQuery, subjects]);
 
   if (!currentCategory) {

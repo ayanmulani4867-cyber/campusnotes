@@ -20,6 +20,7 @@ import {
 import { MaterialCard } from '../components/materials/MaterialCard';
 import { MaterialCardSkeleton } from '../components/common/Skeleton';
 import { EmptyState } from '../components/common/EmptyState';
+import { sortStudyMaterialsAscending } from '../utils/materialSorting';
 
 export const SubjectDetailPage: React.FC = () => {
   const { subjectId } = useParams<{ subjectId: string }>();
@@ -121,7 +122,7 @@ export const SubjectDetailPage: React.FC = () => {
 
   const filteredMaterials = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return materials.filter((m) => {
+    const filtered = materials.filter((m) => {
       if (!m.published) return false;
       if (selectedCategory && m.category !== selectedCategory) return false;
       if (q) {
@@ -136,6 +137,7 @@ export const SubjectDetailPage: React.FC = () => {
       }
       return true;
     });
+    return sortStudyMaterialsAscending(filtered);
   }, [materials, selectedCategory, searchQuery]);
 
   const activeCategoryMeta = CATEGORIES.find((c) => c.id === selectedCategory);
