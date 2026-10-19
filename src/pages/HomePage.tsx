@@ -16,22 +16,37 @@ import {
 } from '../services/firebaseService';
 import { sortStudyMaterialsAscending } from '../utils/materialSorting';
 import { MaterialCard } from '../components/materials/MaterialCard';
+import { cacheService } from '../services/cacheService';
+import { OFFICIAL_CSE_SEM_5_SUBJECTS } from '../constants/subjects';
 import {
   MaterialCardSkeleton,
   SubjectCardSkeleton,
 } from '../components/common/Skeleton';
 
 export const HomePage: React.FC = () => {
-  const [materials, setMaterials] = useState<StudyMaterial[]>([]);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Synchronous state initialization from cache / static baseline for near-instant first paint
+  const [materials, setMaterials] = useState<StudyMaterial[]>(() => {
+    return cacheService.get<StudyMaterial[]>('public_materials_limit_100') || [];
+  });
+  const [subjects, setSubjects] = useState<Subject[]>(() => {
+    const cached = cacheService.get<Subject[]>('public_subjects');
+    if (cached && cached.length > 0) return cached;
+    return OFFICIAL_CSE_SEM_5_SUBJECTS.map((s) => ({
+      ...s,
+      createdAt: 0,
+      updatedAt: 0,
+    }));
+  });
+  const [loading, setLoading] = useState<boolean>(() => {
+    const cached = cacheService.get<StudyMaterial[]>('public_materials_limit_100');
+    return !cached || cached.length === 0;
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const navigate = useNavigate();
 
   useEffect(() => {
     let isMounted = true;
-    setLoading(true);
 
     const unsubMats = subscribeToPublicMaterials(
       (data) => {

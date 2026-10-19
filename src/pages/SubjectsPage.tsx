@@ -15,16 +15,34 @@ import {
 } from '../services/firebaseService';
 import { SubjectCardSkeleton } from '../components/common/Skeleton';
 import { EmptyState } from '../components/common/EmptyState';
+import { cacheService } from '../services/cacheService';
 
 export const SubjectsPage: React.FC = () => {
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [materials, setMaterials] = useState<StudyMaterial[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Synchronous state initialization from cache / static baseline for instant render
+  const [subjects, setSubjects] = useState<Subject[]>(() => {
+    const cached = cacheService.get<Subject[]>('public_subjects');
+    if (cached && cached.length > 0) return cached;
+    return OFFICIAL_CSE_SEM_5_SUBJECTS.map((s) => ({
+      ...s,
+      createdAt: 0,
+      updatedAt: 0,
+    }));
+  });
+  const [materials, setMaterials] = useState<StudyMaterial[]>(() => {
+    return (
+      cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
+      cacheService.get<StudyMaterial[]>('public_materials_limit_100') ||
+      []
+    );
+  });
+  const [loading, setLoading] = useState<boolean>(() => {
+    const cached = cacheService.get<Subject[]>('public_subjects');
+    return !cached || cached.length === 0;
+  });
 
   useEffect(() => {
     async function loadData() {
       try {
-        setLoading(true);
         const [subs, mats] = await Promise.all([
           getPublicSubjects(),
           getPublicMaterials(150),

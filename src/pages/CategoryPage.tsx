@@ -16,13 +16,34 @@ import { MaterialCard } from '../components/materials/MaterialCard';
 import { MaterialCardSkeleton } from '../components/common/Skeleton';
 import { EmptyState } from '../components/common/EmptyState';
 import { sortStudyMaterialsAscending } from '../utils/materialSorting';
+import { cacheService } from '../services/cacheService';
 
 export const CategoryPage: React.FC = () => {
   const { categorySlug } = useParams<{ categorySlug: string }>();
 
-  const [materials, setMaterials] = useState<StudyMaterial[]>([]);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Synchronous state initialization from cache / static baseline for instant category render
+  const [materials, setMaterials] = useState<StudyMaterial[]>(() => {
+    return (
+      cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
+      cacheService.get<StudyMaterial[]>('public_materials_limit_100') ||
+      []
+    );
+  });
+  const [subjects, setSubjects] = useState<Subject[]>(() => {
+    const cached = cacheService.get<Subject[]>('public_subjects');
+    if (cached && cached.length > 0) return cached;
+    return OFFICIAL_CSE_SEM_5_SUBJECTS.map((s) => ({
+      ...s,
+      createdAt: 0,
+      updatedAt: 0,
+    }));
+  });
+  const [loading, setLoading] = useState<boolean>(() => {
+    const cached =
+      cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
+      cacheService.get<StudyMaterial[]>('public_materials_limit_100');
+    return !cached || cached.length === 0;
+  });
 
   // Filters within category
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
@@ -33,7 +54,6 @@ export const CategoryPage: React.FC = () => {
   useEffect(() => {
     async function loadCategoryData() {
       try {
-        setLoading(true);
         const [mats, subs] = await Promise.all([
           getPublicMaterials(150),
           getPublicSubjects(),

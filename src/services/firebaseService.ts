@@ -29,10 +29,19 @@ import {
   EXCLUDED_SUBJECT_NAMES,
   sanitizeSubjects,
 } from '../constants/subjects';
-import { INITIAL_DEMO_MATERIALS } from '../constants/initialMaterials';
 import { cacheService } from './cacheService';
 import { compareMaterialsAscending } from '../utils/materialSorting';
 import { healthMonitorService } from './healthMonitorService';
+
+// Lazy load fallback demo materials on demand to avoid shipping ~60 kB JSON in initial entry bundle
+async function loadDemoMaterials(): Promise<StudyMaterial[]> {
+  try {
+    const mod = await import('../constants/initialMaterials');
+    return mod.INITIAL_DEMO_MATERIALS;
+  } catch {
+    return [];
+  }
+}
 
 /**
  * Realtime Database limits a single node/leaf string to 10 MB.
@@ -154,6 +163,18 @@ export function base64ToBlob(base64Data: string, mimeType = 'application/pdf'): 
     cleanData = cleanData.substring(prefixIdx + 8);
   }
 
+  // Fast path: native Uint8Array.fromBase64 in modern browsers (Chrome 128+, Safari 18+, Firefox 133+)
+  if (
+    typeof (Uint8Array as unknown as { fromBase64?: (data: string) => Uint8Array }).fromBase64 === 'function'
+  ) {
+    try {
+      const bytes = (Uint8Array as unknown as { fromBase64: (data: string) => Uint8Array }).fromBase64(cleanData);
+      return new Blob([bytes as BlobPart], { type: mimeType });
+    } catch {
+      // Fallback if browser throws on padding
+    }
+  }
+
   const binaryString = atob(cleanData);
   const len = binaryString.length;
   const bytes = new Uint8Array(len);
@@ -258,10 +279,12 @@ export async function getPublicMaterials(limit = 100): Promise<StudyMaterial[]> 
 
       if (snapshot.exists()) {
         const data = snapshot.val();
-        materials = Object.keys(data).map((id) => ({
-          ...data[id],
-          id,
-        }));
+        materials = Object.keys(data)
+          .map((id) => ({
+            ...data[id],
+            id,
+          }))
+          .filter((m) => m.published === true);
         materials.sort(compareMaterialsAscending);
       }
     } catch (err: unknown) {
@@ -271,7 +294,8 @@ export async function getPublicMaterials(limit = 100): Promise<StudyMaterial[]> 
 
   // Fallback to standard initial demo materials if database is empty
   if (materials.length === 0) {
-    materials = INITIAL_DEMO_MATERIALS.slice(0, limit);
+    const demo = await loadDemoMaterials();
+    materials = demo.filter((m) => m.published === true).slice(0, limit);
   }
 
   cacheService.set(cacheKey, materials, 60_000); // 1 minute cache
@@ -292,19 +316,23 @@ export async function getPublicMaterialById(id: string): Promise<StudyMaterial |
       const snapshot = await get(materialRef);
 
       if (snapshot.exists()) {
-        const material: StudyMaterial = {
-          ...snapshot.val(),
-          id,
-        };
-        cacheService.set(cacheKey, material, 120_000);
-        return material;
+        const val = snapshot.val();
+        if (val && val.published === true) {
+          const material: StudyMaterial = {
+            ...val,
+            id,
+          };
+          cacheService.set(cacheKey, material, 120_000);
+          return material;
+        }
       }
     } catch (err: unknown) {
       console.warn(`Notice fetching material ${id} from RTDB:`, err);
     }
   }
 
-  const fallback = INITIAL_DEMO_MATERIALS.find((m) => m.id === id) || null;
+  const demo = await loadDemoMaterials();
+  const fallback = demo.find((m) => m.id === id && m.published === true) || null;
   if (fallback) cacheService.set(cacheKey, fallback, 120_000);
   return fallback;
 }
@@ -327,10 +355,12 @@ export async function getPublicMaterialsBySubject(subjectId: string): Promise<St
 
       if (snapshot.exists()) {
         const data = snapshot.val();
-        materials = Object.keys(data).map((id) => ({
-          ...data[id],
-          id,
-        }));
+        materials = Object.keys(data)
+          .map((id) => ({
+            ...data[id],
+            id,
+          }))
+          .filter((m) => m.published === true);
         materials.sort(compareMaterialsAscending);
       }
     } catch (err) {
@@ -340,7 +370,8 @@ export async function getPublicMaterialsBySubject(subjectId: string): Promise<St
 
   // Fallback to standard demo materials for subject
   if (materials.length === 0) {
-    materials = INITIAL_DEMO_MATERIALS.filter((m) => m.subjectId === subjectId);
+    const demo = await loadDemoMaterials();
+    materials = demo.filter((m) => m.subjectId === subjectId && m.published === true);
   }
 
   cacheService.set(cacheKey, materials, 60_000);
@@ -376,6 +407,7 @@ export async function getMaterialPdfBlob(
         const reader = response.body.getReader();
         const chunks: Uint8Array[] = [];
         let receivedBytes = 0;
+        let lastReportedPercent = -1;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -384,9 +416,12 @@ export async function getMaterialPdfBlob(
             chunks.push(value);
             receivedBytes += value.length;
             const percent = Math.min(99, Math.round((receivedBytes / totalBytes) * 100));
-            const mbReceived = (receivedBytes / (1024 * 1024)).toFixed(1);
-            const mbTotal = (totalBytes / (1024 * 1024)).toFixed(1);
-            onProgress(`Downloading PDF: ${percent}% (${mbReceived} MB / ${mbTotal} MB)...`);
+            if (percent !== lastReportedPercent) {
+              lastReportedPercent = percent;
+              const mbReceived = (receivedBytes / (1024 * 1024)).toFixed(1);
+              const mbTotal = (totalBytes / (1024 * 1024)).toFixed(1);
+              onProgress(`Downloading PDF: ${percent}% (${mbReceived} MB / ${mbTotal} MB)...`);
+            }
           }
         }
 
@@ -790,13 +825,13 @@ export async function deleteSubject(subjectId: string): Promise<void> {
  * Base64 content is isolated under /file_blobs and is NOT loaded here.
  */
 export async function getAllMaterialsAdmin(): Promise<StudyMaterial[]> {
-  if (!database) return INITIAL_DEMO_MATERIALS;
+  if (!database) return await loadDemoMaterials();
 
   try {
     const materialsRef = ref(database, 'materials');
     const snapshot = await get(materialsRef);
 
-    if (!snapshot.exists()) return INITIAL_DEMO_MATERIALS;
+    if (!snapshot.exists()) return await loadDemoMaterials();
 
     const data = snapshot.val();
     const list: StudyMaterial[] = Object.keys(data).map((id) => ({
@@ -804,13 +839,13 @@ export async function getAllMaterialsAdmin(): Promise<StudyMaterial[]> {
       id,
     }));
 
-    if (list.length === 0) return INITIAL_DEMO_MATERIALS;
+    if (list.length === 0) return await loadDemoMaterials();
 
     list.sort(compareMaterialsAscending);
     return list;
   } catch (err: unknown) {
     console.warn('Notice reading admin materials from RTDB, using demo catalog:', err);
-    return INITIAL_DEMO_MATERIALS;
+    return await loadDemoMaterials();
   }
 }
 
@@ -1014,6 +1049,9 @@ export async function updateMaterial(
 
   await update(ref(database), updates);
   cacheService.clearAll();
+  if (merged.blobId && !merged.published) {
+    revokeBlobUrl(merged.blobId);
+  }
 }
 
 /**
@@ -1440,7 +1478,8 @@ export async function seedInitialDemoMaterials(): Promise<{ added: number }> {
   const updates: Record<string, unknown> = {};
   let count = 0;
 
-  for (const m of INITIAL_DEMO_MATERIALS) {
+  const demo = await loadDemoMaterials();
+  for (const m of demo) {
     updates[`materials/${m.id}`] = m;
     if (m.published) {
       updates[`publicMaterials/${m.id}`] = m;
@@ -1476,7 +1515,9 @@ export function subscribeToPublicMaterials(
 
   if (!isFirebaseConfigured || !database) {
     if (!cached || cached.length === 0) {
-      callback(INITIAL_DEMO_MATERIALS.slice(0, limit));
+      loadDemoMaterials().then((demo) => {
+        if (isSubscribed) callback(demo.filter((m) => m.published === true).slice(0, limit));
+      });
     }
     return () => {
       isSubscribed = false;
@@ -1493,14 +1534,19 @@ export function subscribeToPublicMaterials(
       let materials: StudyMaterial[] = [];
       if (snapshot.exists()) {
         const data = snapshot.val();
-        materials = Object.keys(data).map((id) => ({
-          ...data[id],
-          id,
-        }));
+        materials = Object.keys(data)
+          .map((id) => ({
+            ...data[id],
+            id,
+          }))
+          .filter((m) => m.published === true); // Strictly require published === true
         materials.sort(compareMaterialsAscending);
       }
       if (materials.length === 0) {
-        materials = INITIAL_DEMO_MATERIALS.slice(0, limit);
+        loadDemoMaterials().then((demo) => {
+          if (isSubscribed) callback(demo.filter((m) => m.published === true).slice(0, limit));
+        });
+        return;
       }
       cacheService.set(cacheKey, materials, 60_000);
       callback(materials);
@@ -1510,7 +1556,9 @@ export function subscribeToPublicMaterials(
       console.warn('Realtime public materials listener warning, using demo catalog:', error);
       if (onError) onError(error);
       if (!cached || cached.length === 0) {
-        callback(INITIAL_DEMO_MATERIALS.slice(0, limit));
+        loadDemoMaterials().then((demo) => {
+          if (isSubscribed) callback(demo.filter((m) => m.published === true).slice(0, limit));
+        });
       }
     }
   );
@@ -1544,7 +1592,9 @@ export function subscribeToSubjectMaterials(
 
   if (!isFirebaseConfigured || !database) {
     if (!cached || cached.length === 0) {
-      callback(INITIAL_DEMO_MATERIALS.filter((m) => m.subjectId === subjectId));
+      loadDemoMaterials().then((demo) => {
+        if (isSubscribed) callback(demo.filter((m) => m.subjectId === subjectId && m.published === true));
+      });
     }
     return () => {
       isSubscribed = false;
@@ -1561,14 +1611,19 @@ export function subscribeToSubjectMaterials(
       let materials: StudyMaterial[] = [];
       if (snapshot.exists()) {
         const data = snapshot.val();
-        materials = Object.keys(data).map((id) => ({
-          ...data[id],
-          id,
-        }));
+        materials = Object.keys(data)
+          .map((id) => ({
+            ...data[id],
+            id,
+          }))
+          .filter((m) => m.published === true); // Strictly require published === true
         materials.sort(compareMaterialsAscending);
       }
       if (materials.length === 0) {
-        materials = INITIAL_DEMO_MATERIALS.filter((m) => m.subjectId === subjectId);
+        loadDemoMaterials().then((demo) => {
+          if (isSubscribed) callback(demo.filter((m) => m.subjectId === subjectId && m.published === true));
+        });
+        return;
       }
       cacheService.set(cacheKey, materials, 60_000);
       callback(materials);
@@ -1578,7 +1633,9 @@ export function subscribeToSubjectMaterials(
       console.warn(`Realtime subject materials warning (${subjectId}):`, error);
       if (onError) onError(error);
       if (!cached || cached.length === 0) {
-        callback(INITIAL_DEMO_MATERIALS.filter((m) => m.subjectId === subjectId));
+        loadDemoMaterials().then((demo) => {
+          if (isSubscribed) callback(demo.filter((m) => m.subjectId === subjectId && m.published === true));
+        });
       }
     }
   );
@@ -1597,7 +1654,7 @@ export function subscribeToMaterialsAdmin(
   onError?: (err: Error) => void
 ): Unsubscribe {
   if (!database) {
-    callback(INITIAL_DEMO_MATERIALS);
+    loadDemoMaterials().then((demo) => callback(demo));
     return () => {};
   }
 
@@ -1615,14 +1672,15 @@ export function subscribeToMaterialsAdmin(
         list.sort(compareMaterialsAscending);
       }
       if (list.length === 0) {
-        list = INITIAL_DEMO_MATERIALS;
+        loadDemoMaterials().then((demo) => callback(demo));
+        return;
       }
       callback(list);
     },
     (error: Error) => {
       console.warn('Realtime admin materials listener warning:', error);
       if (onError) onError(error);
-      callback(INITIAL_DEMO_MATERIALS);
+      loadDemoMaterials().then((demo) => callback(demo));
     }
   );
 }

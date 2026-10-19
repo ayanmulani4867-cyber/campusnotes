@@ -11,13 +11,35 @@ import { MaterialCardSkeleton } from '../components/common/Skeleton';
 import { EmptyState } from '../components/common/EmptyState';
 import { FileText, RefreshCw } from 'lucide-react';
 import { compareMaterialsAscending } from '../utils/materialSorting';
+import { cacheService } from '../services/cacheService';
+import { OFFICIAL_CSE_SEM_5_SUBJECTS } from '../constants/subjects';
 
 export const MaterialsPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [materials, setMaterials] = useState<StudyMaterial[]>([]);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Instant state initialization from cache to prevent skeleton flashing
+  const [materials, setMaterials] = useState<StudyMaterial[]>(() => {
+    return (
+      cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
+      cacheService.get<StudyMaterial[]>('public_materials_limit_100') ||
+      []
+    );
+  });
+  const [subjects, setSubjects] = useState<Subject[]>(() => {
+    const cached = cacheService.get<Subject[]>('public_subjects');
+    if (cached && cached.length > 0) return cached;
+    return OFFICIAL_CSE_SEM_5_SUBJECTS.map((s) => ({
+      ...s,
+      createdAt: 0,
+      updatedAt: 0,
+    }));
+  });
+  const [loading, setLoading] = useState<boolean>(() => {
+    const cached =
+      cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
+      cacheService.get<StudyMaterial[]>('public_materials_limit_100');
+    return !cached || cached.length === 0;
+  });
 
   // Initialize filter state from search params
   const [filters, setFilters] = useState<MaterialFilterState>({
@@ -30,7 +52,6 @@ export const MaterialsPage: React.FC = () => {
 
   useEffect(() => {
     let isMounted = true;
-    setLoading(true);
 
     const unsubMats = subscribeToPublicMaterials(
       (mats) => {

@@ -21,14 +21,55 @@ import { MaterialCard } from '../components/materials/MaterialCard';
 import { MaterialCardSkeleton } from '../components/common/Skeleton';
 import { EmptyState } from '../components/common/EmptyState';
 import { sortStudyMaterialsAscending } from '../utils/materialSorting';
+import { cacheService } from '../services/cacheService';
 
 export const SubjectDetailPage: React.FC = () => {
   const { subjectId } = useParams<{ subjectId: string }>();
 
-  const [subject, setSubject] = useState<Subject | null>(null);
-  const [materials, setMaterials] = useState<StudyMaterial[]>([]);
-  const [subjectLoading, setSubjectLoading] = useState(true);
-  const [materialsLoading, setMaterialsLoading] = useState(true);
+  // Synchronous state initialization from static curriculum and cache
+  const [subject, setSubject] = useState<Subject | null>(() => {
+    if (!subjectId) return null;
+    const rawId = decodeURIComponent(subjectId).trim().toLowerCase();
+    const match = OFFICIAL_CSE_SEM_5_SUBJECTS.find(
+      (s) =>
+        s.id.toLowerCase() === rawId ||
+        s.code.toLowerCase() === rawId ||
+        s.name.toLowerCase() === rawId
+    );
+    if (match) return { ...match, createdAt: 0, updatedAt: 0 };
+    return null;
+  });
+  const [materials, setMaterials] = useState<StudyMaterial[]>(() => {
+    if (!subjectId) return [];
+    const cached = cacheService.get<StudyMaterial[]>(`public_materials_subject_${subjectId}`);
+    if (cached && cached.length > 0) return cached;
+    const allMats =
+      cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
+      cacheService.get<StudyMaterial[]>('public_materials_limit_100');
+    if (allMats) {
+      const filtered = allMats.filter((m) => m.subjectId === subjectId);
+      if (filtered.length > 0) return filtered;
+    }
+    return [];
+  });
+  const [subjectLoading, setSubjectLoading] = useState<boolean>(() => {
+    if (!subjectId) return true;
+    const rawId = decodeURIComponent(subjectId).trim().toLowerCase();
+    return !OFFICIAL_CSE_SEM_5_SUBJECTS.some(
+      (s) =>
+        s.id.toLowerCase() === rawId ||
+        s.code.toLowerCase() === rawId ||
+        s.name.toLowerCase() === rawId
+    );
+  });
+  const [materialsLoading, setMaterialsLoading] = useState<boolean>(() => {
+    if (!subjectId) return true;
+    const cached = cacheService.get<StudyMaterial[]>(`public_materials_subject_${subjectId}`);
+    if (cached && cached.length > 0) return false;
+    const allMats = cacheService.get<StudyMaterial[]>('public_materials_limit_150');
+    if (allMats && allMats.some((m) => m.subjectId === subjectId)) return false;
+    return true;
+  });
 
   // Filters within subject
   const [selectedCategory, setSelectedCategory] = useState<string>('');
@@ -37,8 +78,6 @@ export const SubjectDetailPage: React.FC = () => {
   useEffect(() => {
     if (!subjectId) return;
     let isMounted = true;
-    setSubjectLoading(true);
-    setMaterialsLoading(true);
 
     const rawId = decodeURIComponent(subjectId).trim();
     const normalized = rawId.toLowerCase();

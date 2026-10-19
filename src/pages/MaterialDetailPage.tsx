@@ -26,15 +26,50 @@ import { MaterialCard, formatFileSize, formatDate } from '../components/material
 import { EmptyState } from '../components/common/EmptyState';
 import { useToast } from '../context/ToastContext';
 import { shareMaterial } from '../utils/shareUtils';
+import { cacheService } from '../services/cacheService';
 
 export const MaterialDetailPage: React.FC = () => {
   const { materialId } = useParams<{ materialId: string }>();
   const toast = useToast();
 
-  const [material, setMaterial] = useState<StudyMaterial | null>(null);
-  const [subject, setSubject] = useState<Subject | null>(null);
+  // Instant lookup in cacheService to show note metadata on frame 1 without loading spinner
+  const [material, setMaterial] = useState<StudyMaterial | null>(() => {
+    if (!materialId) return null;
+    const directCached = cacheService.get<StudyMaterial>(`material_${materialId}`);
+    if (directCached) return directCached;
+    const catalog =
+      cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
+      cacheService.get<StudyMaterial[]>('public_materials_limit_100');
+    if (catalog) {
+      return catalog.find((m) => m.id === materialId) || null;
+    }
+    return null;
+  });
+
+  const [subject, setSubject] = useState<Subject | null>(() => {
+    if (!materialId) return null;
+    const note =
+      cacheService.get<StudyMaterial>(`material_${materialId}`) ||
+      (cacheService.get<StudyMaterial[]>('public_materials_limit_150') || []).find((m) => m.id === materialId);
+    if (note) {
+      const subs = cacheService.get<Subject[]>('public_subjects');
+      if (subs) {
+        return subs.find((s) => s.id === note.subjectId) || null;
+      }
+    }
+    return null;
+  });
+
   const [relatedMaterials, setRelatedMaterials] = useState<StudyMaterial[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (!materialId) return true;
+    const directCached = cacheService.get<StudyMaterial>(`material_${materialId}`);
+    if (directCached) return false;
+    const catalog =
+      cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
+      cacheService.get<StudyMaterial[]>('public_materials_limit_100');
+    return !catalog || !catalog.some((m) => m.id === materialId);
+  });
   const [downloading, setDownloading] = useState(false);
   const [downloadProgressText, setDownloadProgressText] = useState('');
   const [copied, setCopied] = useState(false);
@@ -43,7 +78,6 @@ export const MaterialDetailPage: React.FC = () => {
     async function loadData() {
       if (!materialId) return;
       try {
-        setLoading(true);
         const [mat, subs] = await Promise.all([
           getPublicMaterialById(materialId),
           getPublicSubjects(),
