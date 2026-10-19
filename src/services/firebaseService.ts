@@ -1370,15 +1370,33 @@ export function subscribeToPublicSubjects(
   callback: (subjects: Subject[]) => void,
   onError?: (err: Error) => void
 ): Unsubscribe {
+  const cacheKey = 'public_subjects';
+  let isSubscribed = true;
+
+  // Stale-While-Revalidate: deliver valid cached subjects immediately (0 ms catalog paint)
+  const cached = cacheService.get<Subject[]>(cacheKey);
+  if (cached && cached.length > 0) {
+    try {
+      callback(cached);
+    } catch (e) {
+      console.warn('Error in public subjects cached callback:', e);
+    }
+  }
+
   if (!isFirebaseConfigured || !database) {
-    callback(getSanitizedDefaultSubjects());
-    return () => {};
+    if (!cached || cached.length === 0) {
+      callback(getSanitizedDefaultSubjects());
+    }
+    return () => {
+      isSubscribed = false;
+    };
   }
 
   const subjectsRef = ref(database, 'subjects');
-  return onValue(
+  const unsubscribe = onValue(
     subjectsRef,
     (snapshot: RtdbSnapshot) => {
+      if (!isSubscribed) return;
       let list: Subject[] = [];
       if (snapshot.exists()) {
         const data = snapshot.val();
@@ -1391,15 +1409,23 @@ export function subscribeToPublicSubjects(
         .filter((s) => s.active !== false)
         .sort((a, b) => a.code.localeCompare(b.code));
 
-      cacheService.set('public_subjects', sanitized, 180_000);
+      cacheService.set(cacheKey, sanitized, 180_000);
       callback(sanitized);
     },
     (error: Error) => {
+      if (!isSubscribed) return;
       console.warn('Realtime public subjects listener warning:', error);
       if (onError) onError(error);
-      callback(getSanitizedDefaultSubjects());
+      if (!cached || cached.length === 0) {
+        callback(getSanitizedDefaultSubjects());
+      }
     }
   );
+
+  return () => {
+    isSubscribed = false;
+    unsubscribe();
+  };
 }
 
 /**
@@ -1435,17 +1461,35 @@ export function subscribeToPublicMaterials(
   limit = 100,
   onError?: (err: Error) => void
 ): Unsubscribe {
+  const cacheKey = `public_materials_limit_${limit}`;
+  let isSubscribed = true;
+
+  // Stale-While-Revalidate: deliver fresh or session-cached data immediately (0 ms catalog paint)
+  const cached = cacheService.get<StudyMaterial[]>(cacheKey);
+  if (cached && cached.length > 0) {
+    try {
+      callback(cached);
+    } catch (e) {
+      console.warn('Error in public materials cached callback:', e);
+    }
+  }
+
   if (!isFirebaseConfigured || !database) {
-    callback(INITIAL_DEMO_MATERIALS.slice(0, limit));
-    return () => {};
+    if (!cached || cached.length === 0) {
+      callback(INITIAL_DEMO_MATERIALS.slice(0, limit));
+    }
+    return () => {
+      isSubscribed = false;
+    };
   }
 
   const pubRef = ref(database, 'publicMaterials');
   const q = query(pubRef, orderByChild('createdAt'), limitToLast(limit));
 
-  return onValue(
+  const unsubscribe = onValue(
     q,
     (snapshot: RtdbSnapshot) => {
+      if (!isSubscribed) return;
       let materials: StudyMaterial[] = [];
       if (snapshot.exists()) {
         const data = snapshot.val();
@@ -1458,15 +1502,23 @@ export function subscribeToPublicMaterials(
       if (materials.length === 0) {
         materials = INITIAL_DEMO_MATERIALS.slice(0, limit);
       }
-      cacheService.set(`public_materials_limit_${limit}`, materials, 60_000);
+      cacheService.set(cacheKey, materials, 60_000);
       callback(materials);
     },
     (error: Error) => {
+      if (!isSubscribed) return;
       console.warn('Realtime public materials listener warning, using demo catalog:', error);
       if (onError) onError(error);
-      callback(INITIAL_DEMO_MATERIALS.slice(0, limit));
+      if (!cached || cached.length === 0) {
+        callback(INITIAL_DEMO_MATERIALS.slice(0, limit));
+      }
     }
   );
+
+  return () => {
+    isSubscribed = false;
+    unsubscribe();
+  };
 }
 
 /**
@@ -1477,17 +1529,35 @@ export function subscribeToSubjectMaterials(
   callback: (materials: StudyMaterial[]) => void,
   onError?: (err: Error) => void
 ): Unsubscribe {
+  const cacheKey = `public_materials_subject_${subjectId}`;
+  let isSubscribed = true;
+
+  // Stale-While-Revalidate: deliver cached subject materials immediately
+  const cached = cacheService.get<StudyMaterial[]>(cacheKey);
+  if (cached && cached.length > 0) {
+    try {
+      callback(cached);
+    } catch (e) {
+      console.warn(`Error in subject materials cached callback (${subjectId}):`, e);
+    }
+  }
+
   if (!isFirebaseConfigured || !database) {
-    callback(INITIAL_DEMO_MATERIALS.filter((m) => m.subjectId === subjectId));
-    return () => {};
+    if (!cached || cached.length === 0) {
+      callback(INITIAL_DEMO_MATERIALS.filter((m) => m.subjectId === subjectId));
+    }
+    return () => {
+      isSubscribed = false;
+    };
   }
 
   const pubRef = ref(database, 'publicMaterials');
   const q = query(pubRef, orderByChild('subjectId'), equalTo(subjectId));
 
-  return onValue(
+  const unsubscribe = onValue(
     q,
     (snapshot: RtdbSnapshot) => {
+      if (!isSubscribed) return;
       let materials: StudyMaterial[] = [];
       if (snapshot.exists()) {
         const data = snapshot.val();
@@ -1500,14 +1570,23 @@ export function subscribeToSubjectMaterials(
       if (materials.length === 0) {
         materials = INITIAL_DEMO_MATERIALS.filter((m) => m.subjectId === subjectId);
       }
+      cacheService.set(cacheKey, materials, 60_000);
       callback(materials);
     },
     (error: Error) => {
+      if (!isSubscribed) return;
       console.warn(`Realtime subject materials warning (${subjectId}):`, error);
       if (onError) onError(error);
-      callback(INITIAL_DEMO_MATERIALS.filter((m) => m.subjectId === subjectId));
+      if (!cached || cached.length === 0) {
+        callback(INITIAL_DEMO_MATERIALS.filter((m) => m.subjectId === subjectId));
+      }
     }
   );
+
+  return () => {
+    isSubscribed = false;
+    unsubscribe();
+  };
 }
 
 /**

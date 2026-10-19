@@ -23,6 +23,12 @@ interface MaterialCardProps {
   onPreview?: (material: StudyMaterial) => void;
 }
 
+const indianDateFormatter = new Intl.DateTimeFormat('en-IN', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+});
+
 export const formatFileSize = (bytes: number): string => {
   if (!bytes || bytes === 0) return '0 KB';
   const k = 1024;
@@ -33,14 +39,14 @@ export const formatFileSize = (bytes: number): string => {
 
 export const formatDate = (timestamp: number): string => {
   if (!timestamp) return 'Recent';
-  return new Intl.DateTimeFormat('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(new Date(timestamp));
+  try {
+    return indianDateFormatter.format(new Date(timestamp));
+  } catch {
+    return 'Recent';
+  }
 };
 
-export const MaterialCard: React.FC<MaterialCardProps> = ({
+export const MaterialCard: React.FC<MaterialCardProps> = React.memo(({
   material,
   subject,
 }) => {
@@ -226,4 +232,6 @@ export const MaterialCard: React.FC<MaterialCardProps> = ({
       </div>
     </div>
   );
-};
+});
+
+MaterialCard.displayName = 'MaterialCard';
