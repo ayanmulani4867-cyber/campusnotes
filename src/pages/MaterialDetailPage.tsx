@@ -36,6 +36,7 @@ export const MaterialDetailPage: React.FC = () => {
   const [relatedMaterials, setRelatedMaterials] = useState<StudyMaterial[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [downloadProgressText, setDownloadProgressText] = useState('');
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -83,12 +84,16 @@ export const MaterialDetailPage: React.FC = () => {
     if (!material || downloading) return;
     try {
       setDownloading(true);
-      await downloadStudyMaterial(material);
+      setDownloadProgressText('Connecting...');
+      await downloadStudyMaterial(material, (status) => {
+        setDownloadProgressText(status);
+      });
       toast.success('Download Complete', 'PDF document downloaded successfully.');
     } catch (err: unknown) {
       toast.error('Download Failed', err instanceof Error ? err.message : String(err));
     } finally {
       setDownloading(false);
+      setDownloadProgressText('');
     }
   };
 
@@ -213,7 +218,7 @@ export const MaterialDetailPage: React.FC = () => {
                 {downloading ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Preparing PDF...</span>
+                    <span>{downloadProgressText || 'Downloading...'}</span>
                   </>
                 ) : (
                   <>

@@ -46,6 +46,37 @@ export const MAX_FILE_SIZE_BYTES = MAX_RTDB_PDF_SIZE_BYTES;
 // In-memory cache for created object URLs to prevent duplicate memory allocation
 const objectUrlMemoryCache = new Map<string, string>();
 
+export interface CachedPdfBlob {
+  blob: Blob;
+  objectUrl: string;
+  fileName?: string;
+  mimeType?: string;
+  sizeBytes: number;
+}
+
+// Unified in-memory session cache for downloaded PDF blobs to prevent duplicate RTDB bandwidth
+const pdfBlobSessionCache = new Map<string, CachedPdfBlob>();
+
+// In-flight request deduplication map to prevent simultaneous duplicate downloads of the same blob
+const inFlightPdfRequests = new Map<string, Promise<CachedPdfBlob>>();
+
+/**
+ * Checks whether a PDF blob is already cached in memory for the current session.
+ */
+export function isPdfCached(blobId?: string | null): boolean {
+  if (!blobId) return false;
+  return pdfBlobSessionCache.has(blobId.trim());
+}
+
+/**
+ * Returns the cached object URL for a blob if present in the current session.
+ */
+export function getCachedBlobUrl(blobId?: string | null): string | null {
+  if (!blobId) return null;
+  const cached = pdfBlobSessionCache.get(blobId.trim());
+  return cached ? cached.objectUrl : null;
+}
+
 /**
  * Validates that the file has a genuine PDF magic byte header (%PDF-).
  * ASCII codes: 0x25 (%), 0x50 (P), 0x44 (D), 0x46 (F), 0x2D (-)
@@ -113,10 +144,17 @@ export function fileToBase64Async(
 }
 
 /**
- * Converts a Base64 string back into a standard binary Blob.
+ * Converts a Base64 string back into a standard binary Blob efficiently.
  */
 export function base64ToBlob(base64Data: string, mimeType = 'application/pdf'): Blob {
-  const binaryString = atob(base64Data);
+  // Strip data URI prefix if present without creating duplicate string copies
+  let cleanData = base64Data;
+  const prefixIdx = cleanData.indexOf(';base64,');
+  if (prefixIdx !== -1) {
+    cleanData = cleanData.substring(prefixIdx + 8);
+  }
+
+  const binaryString = atob(cleanData);
   const len = binaryString.length;
   const bytes = new Uint8Array(len);
   for (let i = 0; i < len; i++) {
@@ -129,6 +167,16 @@ export function base64ToBlob(base64Data: string, mimeType = 'application/pdf'): 
  * Revokes a cached blob URL to free browser memory.
  */
 export function revokeBlobUrl(blobId: string): void {
+  const cached = pdfBlobSessionCache.get(blobId);
+  if (cached) {
+    try {
+      URL.revokeObjectURL(cached.objectUrl);
+    } catch {
+      // Ignore revocation errors
+    }
+    pdfBlobSessionCache.delete(blobId);
+  }
+
   const existing = objectUrlMemoryCache.get(blobId);
   if (existing) {
     try {
@@ -305,22 +353,147 @@ export async function getPublicMaterialsBySubject(subjectId: string): Promise<St
 
 /**
  * Fetch PDF blob from the isolated /file_blobs partition by blob ID.
- * This is only retrieved when a user actually views or downloads a document.
+ * Tries fast native HTTPS streaming fetch first with progress telemetry,
+ * falling back seamlessly to Firebase Realtime Database SDK get().
  */
-export async function getMaterialPdfBlob(blobId: string): Promise<FileBlobRecord | null> {
-  if (!database || !blobId) return null;
+export async function getMaterialPdfBlob(
+  blobId: string,
+  onProgress?: (status: string) => void
+): Promise<FileBlobRecord | null> {
+  if (!blobId) return null;
 
+  // 1. Try fast HTTPS REST fetch (bypasses WebSocket message queue, native HTTP pipeline)
   try {
-    const blobRef = ref(database, `file_blobs/${blobId}`);
-    const snapshot = await get(blobRef);
-    if (snapshot.exists()) {
-      return snapshot.val() as FileBlobRecord;
+    const dbUrl = 'https://campusnotes-e62cf-default-rtdb.firebaseio.com';
+    const restUrl = `${dbUrl}/file_blobs/${encodeURIComponent(blobId)}.json`;
+
+    const response = await fetch(restUrl);
+    if (response.ok) {
+      const contentLength = response.headers.get('content-length');
+      const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+
+      if (response.body && totalBytes > 0 && typeof onProgress === 'function') {
+        const reader = response.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let receivedBytes = 0;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            chunks.push(value);
+            receivedBytes += value.length;
+            const percent = Math.min(99, Math.round((receivedBytes / totalBytes) * 100));
+            const mbReceived = (receivedBytes / (1024 * 1024)).toFixed(1);
+            const mbTotal = (totalBytes / (1024 * 1024)).toFixed(1);
+            onProgress(`Downloading PDF: ${percent}% (${mbReceived} MB / ${mbTotal} MB)...`);
+          }
+        }
+
+        const concatenated = new Uint8Array(receivedBytes);
+        let offset = 0;
+        for (const chunk of chunks) {
+          concatenated.set(chunk, offset);
+          offset += chunk.length;
+        }
+
+        const text = new TextDecoder('utf-8').decode(concatenated);
+        const record = JSON.parse(text) as FileBlobRecord;
+        if (record && record.data_base64) {
+          return record;
+        }
+      } else {
+        const record = (await response.json()) as FileBlobRecord;
+        if (record && record.data_base64) {
+          return record;
+        }
+      }
     }
-  } catch (err) {
-    console.error(`Error fetching PDF blob ${blobId} from RTDB:`, err);
-    throw err;
+  } catch (restErr) {
+    console.warn(`REST fetch notice for blob ${blobId}, using SDK fallback:`, restErr);
+  }
+
+  // 2. Fallback to Firebase Realtime Database SDK get()
+  if (database) {
+    try {
+      onProgress?.('Fetching PDF from database...');
+      const blobRef = ref(database, `file_blobs/${blobId}`);
+      const snapshot = await get(blobRef);
+      if (snapshot.exists()) {
+        return snapshot.val() as FileBlobRecord;
+      }
+    } catch (err) {
+      console.error(`Error fetching PDF blob ${blobId} from RTDB:`, err);
+      throw err;
+    }
   }
   return null;
+}
+
+/**
+ * Retrieves a PDF blob from session memory, joins an active in-flight request,
+ * or initiates an optimized fetch with progress telemetry.
+ */
+export async function getOrFetchPdfBlob(
+  blobId: string,
+  onProgress?: (status: string) => void
+): Promise<CachedPdfBlob> {
+  const cleanId = blobId.trim();
+  if (!cleanId) throw new Error('Missing PDF blob identifier.');
+
+  // 1. Check in-memory session cache (0 ms instant response, 0 network)
+  const cached = pdfBlobSessionCache.get(cleanId);
+  if (cached) {
+    onProgress?.('Ready from session cache');
+    return cached;
+  }
+
+  // 2. Check in-flight requests (deduplicates concurrent preview + download, repeated clicks)
+  const existingPromise = inFlightPdfRequests.get(cleanId);
+  if (existingPromise) {
+    onProgress?.('Connecting to active download...');
+    return await existingPromise;
+  }
+
+  // 3. Initiate single optimized fetch and register in flight
+  const fetchPromise = (async () => {
+    try {
+      onProgress?.('Connecting to database...');
+
+      const blobRecord = await getMaterialPdfBlob(cleanId, onProgress);
+      if (!blobRecord || !blobRecord.data_base64) {
+        throw new Error(
+          'The requested PDF document could not be retrieved from the database or access was denied.'
+        );
+      }
+
+      onProgress?.('Preparing file...');
+
+      // Fast Base64 decoding
+      const mimeType = blobRecord.mime_type || 'application/pdf';
+      const blob = base64ToBlob(blobRecord.data_base64, mimeType);
+      const objectUrl = URL.createObjectURL(blob);
+
+      const cachedEntry: CachedPdfBlob = {
+        blob,
+        objectUrl,
+        fileName: blobRecord.file_name,
+        mimeType,
+        sizeBytes: blob.size,
+      };
+
+      // Store in session cache
+      pdfBlobSessionCache.set(cleanId, cachedEntry);
+      objectUrlMemoryCache.set(cleanId, objectUrl);
+
+      return cachedEntry;
+    } finally {
+      inFlightPdfRequests.delete(cleanId);
+    }
+  })();
+
+  inFlightPdfRequests.set(cleanId, fetchPromise);
+  return await fetchPromise;
 }
 
 /**
@@ -364,7 +537,10 @@ export function sanitizeFilename(name: string): string {
  * - If stored as Base64 in RTDB (/file_blobs/): fetches on demand, decodes to Blob, creates a blob: URL.
  * - If legacy URL (/demo-pdfs/ or external HTTP): returns the URL directly.
  */
-export async function fetchPdfBlobUrl(material: StudyMaterial): Promise<string> {
+export async function fetchPdfBlobUrl(
+  material: StudyMaterial,
+  onProgress?: (status: string) => void
+): Promise<string> {
   // 1. Direct path for local demo PDFs
   if (material.downloadUrl && material.downloadUrl.startsWith('/demo-pdfs/')) {
     return material.downloadUrl;
@@ -391,18 +567,8 @@ export async function fetchPdfBlobUrl(material: StudyMaterial): Promise<string> 
   }
 
   if (blobId) {
-    // Return cached object URL if already created in this browser session
-    if (objectUrlMemoryCache.has(blobId)) {
-      return objectUrlMemoryCache.get(blobId)!;
-    }
-
-    const blobRecord = await getMaterialPdfBlob(blobId);
-    if (blobRecord && blobRecord.data_base64) {
-      const blob = base64ToBlob(blobRecord.data_base64, blobRecord.mime_type || 'application/pdf');
-      const url = URL.createObjectURL(blob);
-      objectUrlMemoryCache.set(blobId, url);
-      return url;
-    }
+    const cachedEntry = await getOrFetchPdfBlob(blobId, onProgress);
+    return cachedEntry.objectUrl;
   }
 
   // 3. Fallback to existing downloadUrl if valid HTTP URL
@@ -421,97 +587,89 @@ export async function fetchPdfBlobUrl(material: StudyMaterial): Promise<string> 
 
 /**
  * Safely downloads a study material for public or admin users:
- * 1. Fetches latest published material metadata directly from RTDB to guarantee fresh blobId (bypassing stale cache).
- * 2. If it's a local demo PDF (/demo-pdfs/...), downloads directly.
- * 3. Extracts current blobId (from blobId, storagePath, or downloadUrl).
- * 4. Fetches file blob record from /file_blobs/{blobId}.
- * 5. Decodes Base64 data into binary PDF bytes.
- * 6. Creates a temporary Blob URL (application/pdf).
- * 7. Triggers programmatic browser download without popup blockers (no target=_blank).
- * 8. Schedules cleanup of temporary Blob URL after download completes.
+ * 1. Checks if it's a local demo PDF or external HTTP URL.
+ * 2. Extracts blobId directly from materialInput without extra database roundtrips.
+ * 3. Reuses already downloaded blob from session cache (0 ms instant download) or joins in-flight request.
+ * 4. Triggers programmatic browser download without popup blockers (no target=_blank).
  */
 export async function downloadStudyMaterial(
   materialInput: StudyMaterial,
   onProgress?: (status: string) => void
 ): Promise<void> {
   try {
-    // Step 1: Ensure we have the freshest material metadata directly from RTDB
-    let freshMaterial = materialInput;
-    if (database && materialInput.id) {
-      try {
-        const pubSnap = await get(ref(database, `publicMaterials/${materialInput.id}`));
-        if (pubSnap.exists()) {
-          freshMaterial = { ...materialInput, ...pubSnap.val() };
-        } else {
-          const privSnap = await get(ref(database, `materials/${materialInput.id}`)).catch(() => null);
-          if (privSnap && privSnap.exists()) {
-            freshMaterial = { ...materialInput, ...privSnap.val() };
-          }
-        }
-      } catch {
-        // Proceed with passed materialInput if RTDB read fails
-      }
-    }
-
-    // Step 2: Handle static demo PDFs (/demo-pdfs/...)
-    if (freshMaterial.downloadUrl && freshMaterial.downloadUrl.startsWith('/demo-pdfs/')) {
+    // Step 1: Handle static demo PDFs (/demo-pdfs/...)
+    if (materialInput.downloadUrl && materialInput.downloadUrl.startsWith('/demo-pdfs/')) {
       const link = document.createElement('a');
-      link.href = freshMaterial.downloadUrl;
-      const safeDemoName = freshMaterial.fileName || `${sanitizeFilename(freshMaterial.title)}.pdf`;
+      link.href = materialInput.downloadUrl;
+      const safeDemoName = materialInput.fileName || `${sanitizeFilename(materialInput.title)}.pdf`;
       link.download = safeDemoName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       healthMonitorService.recordPdfOperation('DOWNLOAD', true, {
-        materialId: freshMaterial.id,
+        materialId: materialInput.id,
         fileName: safeDemoName,
       });
       return;
     }
 
-    // Step 3: Handle external HTTP URLs
-    if (freshMaterial.downloadUrl && freshMaterial.downloadUrl.startsWith('http')) {
+    // Step 2: Handle external HTTP URLs
+    if (materialInput.downloadUrl && materialInput.downloadUrl.startsWith('http')) {
       const link = document.createElement('a');
-      link.href = freshMaterial.downloadUrl;
-      const safeHttpName = freshMaterial.fileName || `${sanitizeFilename(freshMaterial.title)}.pdf`;
+      link.href = materialInput.downloadUrl;
+      const safeHttpName = materialInput.fileName || `${sanitizeFilename(materialInput.title)}.pdf`;
       link.download = safeHttpName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       healthMonitorService.recordPdfOperation('DOWNLOAD', true, {
-        materialId: freshMaterial.id,
+        materialId: materialInput.id,
         fileName: safeHttpName,
       });
       return;
     }
 
-    // Step 4: Resolve blob ID
-    const blobId = extractBlobId(freshMaterial);
+    // Step 3: Extract blobId without redundant database query if already present
+    let blobId = extractBlobId(materialInput);
+    let freshMaterial = materialInput;
+
+    // Only if blobId is missing, query RTDB metadata
+    if (!blobId && database && materialInput.id) {
+      try {
+        const pubSnap = await get(ref(database, `publicMaterials/${materialInput.id}`));
+        if (pubSnap.exists()) {
+          freshMaterial = { ...materialInput, ...pubSnap.val() };
+          blobId = extractBlobId(freshMaterial);
+        } else {
+          const privSnap = await get(ref(database, `materials/${materialInput.id}`)).catch(() => null);
+          if (privSnap && privSnap.exists()) {
+            freshMaterial = { ...materialInput, ...privSnap.val() };
+            blobId = extractBlobId(freshMaterial);
+          }
+        }
+      } catch {
+        // Proceed with passed input
+      }
+    }
+
     if (!blobId) {
       throw new Error('This study material does not have an associated PDF document in the database.');
     }
 
-    onProgress?.('Fetching PDF from database...');
+    // Step 4: Fetch (or reuse from session cache / active in-flight download)
+    const cachedEntry = await getOrFetchPdfBlob(blobId, onProgress);
 
-    // Step 5: Fetch blob from RTDB /file_blobs/{blobId}
-    const blobRecord = await getMaterialPdfBlob(blobId);
-    if (!blobRecord || !blobRecord.data_base64) {
-      throw new Error('The requested PDF document could not be retrieved from the database or access was denied.');
-    }
+    onProgress?.('Starting download...');
 
-    onProgress?.('Preparing file download...');
-
-    // Step 6: Decode Base64 to binary PDF Blob
-    const pdfBlob = base64ToBlob(blobRecord.data_base64, blobRecord.mime_type || 'application/pdf');
-
-    // Step 7: Create object URL and trigger browser download
-    const blobUrl = URL.createObjectURL(pdfBlob);
-    const safeFilename = freshMaterial.fileName || blobRecord.file_name || `${sanitizeFilename(freshMaterial.title)}.pdf`;
+    // Step 5: Programmatic browser download
+    const safeFilename =
+      freshMaterial.fileName ||
+      cachedEntry.fileName ||
+      `${sanitizeFilename(freshMaterial.title || 'study_material')}.pdf`;
 
     const link = document.createElement('a');
-    link.href = blobUrl;
+    link.href = cachedEntry.objectUrl;
     link.download = safeFilename;
-    // NOTE: Do not use target="_blank" as it causes popup blocker violations after async operations
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -521,15 +679,6 @@ export async function downloadStudyMaterial(
       materialId: freshMaterial.id,
       fileName: safeFilename,
     });
-
-    // Step 8: Revoke temporary Blob URL after generous timeout
-    setTimeout(() => {
-      try {
-        URL.revokeObjectURL(blobUrl);
-      } catch {
-        // Ignore
-      }
-    }, 30000);
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     healthMonitorService.recordPdfOperation('DOWNLOAD', false, {
