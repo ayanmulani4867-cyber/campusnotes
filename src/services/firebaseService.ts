@@ -726,8 +726,18 @@ export async function fetchPdfBlobUrl(
 
   // 2. Direct path for Cloudflare R2 materials
   if (isR2Material(material)) {
-    const cachedEntry = await getOrFetchR2PdfBlob(material, onProgress);
-    return cachedEntry.objectUrl;
+    try {
+      const cachedEntry = await getOrFetchR2PdfBlob(material, onProgress);
+      return cachedEntry.objectUrl;
+    } catch (r2Err) {
+      const fallbackBlobId = extractBlobId(material);
+      if (fallbackBlobId) {
+        console.warn('R2 preview fetch failed, falling back to Firebase RTDB storage:', r2Err);
+        onProgress?.('Cloudflare R2 unavailable, falling back to Firebase storage...');
+      } else {
+        throw r2Err;
+      }
+    }
   }
 
   // 3. Resolve blobId from material metadata
@@ -740,19 +750,31 @@ export async function fetchPdfBlobUrl(
       if (pubSnap.exists()) {
         const val = pubSnap.val();
         if (isR2Material(val)) {
-          const cachedEntry = await getOrFetchR2PdfBlob({ ...material, ...val }, onProgress);
-          return cachedEntry.objectUrl;
+          try {
+            const cachedEntry = await getOrFetchR2PdfBlob({ ...material, ...val }, onProgress);
+            return cachedEntry.objectUrl;
+          } catch (r2Err) {
+            console.warn('R2 preview fetch failed for fresh metadata, falling back to RTDB blob:', r2Err);
+            blobId = extractBlobId(val);
+          }
+        } else {
+          blobId = extractBlobId(val);
         }
-        blobId = extractBlobId(val);
       } else {
         const matSnap = await get(ref(database, `materials/${material.id}`)).catch(() => null);
         if (matSnap && matSnap.exists()) {
           const val = matSnap.val();
           if (isR2Material(val)) {
-            const cachedEntry = await getOrFetchR2PdfBlob({ ...material, ...val }, onProgress);
-            return cachedEntry.objectUrl;
+            try {
+              const cachedEntry = await getOrFetchR2PdfBlob({ ...material, ...val }, onProgress);
+              return cachedEntry.objectUrl;
+            } catch (r2Err) {
+              console.warn('R2 preview fetch failed for fresh private metadata, falling back to RTDB blob:', r2Err);
+              blobId = extractBlobId(val);
+            }
+          } else {
+            blobId = extractBlobId(val);
           }
-          blobId = extractBlobId(val);
         }
       }
     } catch {
@@ -830,27 +852,38 @@ export async function downloadStudyMaterial(
 
     // Step 2.5: Handle Cloudflare R2 Storage Provider
     if (isR2Material(materialInput)) {
-      onProgress?.('Fetching PDF from Cloudflare R2...');
-      const cachedEntry = await getOrFetchR2PdfBlob(materialInput, onProgress);
+      try {
+        onProgress?.('Fetching PDF from Cloudflare R2...');
+        const cachedEntry = await getOrFetchR2PdfBlob(materialInput, onProgress);
 
-      onProgress?.('Starting download...');
-      const safeFilename =
-        materialInput.fileName ||
-        cachedEntry.fileName ||
-        `${sanitizeFilename(materialInput.title || 'study_material')}.pdf`;
+        onProgress?.('Starting download...');
+        const safeFilename =
+          materialInput.fileName ||
+          cachedEntry.fileName ||
+          `${sanitizeFilename(materialInput.title || 'study_material')}.pdf`;
 
-      const link = document.createElement('a');
-      link.href = cachedEntry.objectUrl;
-      link.download = safeFilename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+        const link = document.createElement('a');
+        link.href = cachedEntry.objectUrl;
+        link.download = safeFilename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
 
-      healthMonitorService.recordPdfOperation('DOWNLOAD', true, {
-        materialId: materialInput.id,
-        fileName: safeFilename,
-      });
-      return;
+        healthMonitorService.recordPdfOperation('DOWNLOAD', true, {
+          materialId: materialInput.id,
+          fileName: safeFilename,
+        });
+        return;
+      } catch (r2Err) {
+        const fallbackBlobId = extractBlobId(materialInput);
+        if (fallbackBlobId) {
+          console.warn('R2 download failed, falling back to Firebase RTDB storage:', r2Err);
+          onProgress?.('Cloudflare R2 unavailable, falling back to Firebase storage...');
+          // Proceed to Step 3 below
+        } else {
+          throw r2Err;
+        }
+      }
     }
 
     // Step 3: Extract blobId without redundant database query if already present
@@ -864,19 +897,33 @@ export async function downloadStudyMaterial(
         if (pubSnap.exists()) {
           const val = pubSnap.val();
           if (isR2Material(val)) {
-            return downloadStudyMaterial({ ...materialInput, ...val }, onProgress);
+            try {
+              return await downloadStudyMaterial({ ...materialInput, ...val }, onProgress);
+            } catch (r2Err) {
+              console.warn('R2 download failed for fresh metadata, falling back to RTDB blob:', r2Err);
+              freshMaterial = { ...materialInput, ...val };
+              blobId = extractBlobId(freshMaterial);
+            }
+          } else {
+            freshMaterial = { ...materialInput, ...val };
+            blobId = extractBlobId(freshMaterial);
           }
-          freshMaterial = { ...materialInput, ...val };
-          blobId = extractBlobId(freshMaterial);
         } else {
           const privSnap = await get(ref(database, `materials/${materialInput.id}`)).catch(() => null);
           if (privSnap && privSnap.exists()) {
             const val = privSnap.val();
             if (isR2Material(val)) {
-              return downloadStudyMaterial({ ...materialInput, ...val }, onProgress);
+              try {
+                return await downloadStudyMaterial({ ...materialInput, ...val }, onProgress);
+              } catch (r2Err) {
+                console.warn('R2 download failed for fresh private metadata, falling back to RTDB blob:', r2Err);
+                freshMaterial = { ...materialInput, ...val };
+                blobId = extractBlobId(freshMaterial);
+              }
+            } else {
+              freshMaterial = { ...materialInput, ...val };
+              blobId = extractBlobId(freshMaterial);
             }
-            freshMaterial = { ...materialInput, ...val };
-            blobId = extractBlobId(freshMaterial);
           }
         }
       } catch {

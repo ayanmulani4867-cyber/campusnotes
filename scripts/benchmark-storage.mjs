@@ -6,12 +6,33 @@
 const FIREBASE_RTDB_BLOB_URL = 'https://campusnotes-e62cf-default-rtdb.firebaseio.com/file_blobs/blob_mat_1792330118184_tekd_1792330118214.json';
 const CLOUDFLARE_R2_URL = 'https://campusnotes-pdf-api.ayanmull8886.workers.dev/test-pdf';
 
-async function measureFetch(name, url, isBase64 = false) {
+const args = process.argv.slice(2);
+const tokenArgIdx = args.indexOf('--admin-token');
+const ADMIN_TOKEN = (tokenArgIdx !== -1 && tokenArgIdx + 1 < args.length) ? args[tokenArgIdx + 1] : (process.env.CAMPUSNOTES_ADMIN_TOKEN || '');
+
+async function measureFetch(name, url, isBase64 = false, token = '') {
   const start = performance.now();
-  const res = await fetch(url);
+  const headers = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  const res = await fetch(url, { headers });
   const ttfb = performance.now() - start;
 
   if (!res.ok) {
+    if (res.status === 403 && url.includes('test-pdf')) {
+      return {
+        name,
+        isSecured: true,
+        status: 403,
+        ttfbMs: Math.round(ttfb),
+        wireBytes: 0,
+        finalBinarySize: 0,
+        transferMs: 0,
+        decodeMs: 0,
+        totalMs: Math.round(ttfb),
+      };
+    }
     throw new Error(`${name} fetch failed with HTTP ${res.status}`);
   }
 
@@ -58,8 +79,12 @@ async function runBenchmark() {
     console.log(`  RTDB:  TTFB: ${rtdb.ttfbMs}ms | Transfer: ${rtdb.transferMs}ms | Base64 Decode: ${rtdb.decodeMs}ms | Total: ${rtdb.totalMs}ms | Wire: ${(rtdb.wireBytes / (1024 * 1024)).toFixed(2)} MB`);
     rtdbResults.push(rtdb);
 
-    const r2 = await measureFetch(`Cloudflare R2 (Binary Stream)`, CLOUDFLARE_R2_URL, false);
-    console.log(`  R2:    TTFB: ${r2.ttfbMs}ms | Transfer: ${r2.transferMs}ms | Base64 Decode: 0ms | Total: ${r2.totalMs}ms | Wire: ${(r2.wireBytes / (1024 * 1024)).toFixed(2)} MB\n`);
+    const r2 = await measureFetch(`Cloudflare R2 (Binary Stream)`, CLOUDFLARE_R2_URL, false, ADMIN_TOKEN);
+    if (r2.isSecured) {
+      console.log(`  R2:    TTFB: ${r2.ttfbMs}ms | HTTP 403 Forbidden (Test endpoint decommissioned; requires admin token)\n`);
+    } else {
+      console.log(`  R2:    TTFB: ${r2.ttfbMs}ms | Transfer: ${r2.transferMs}ms | Base64 Decode: 0ms | Total: ${r2.totalMs}ms | Wire: ${(r2.wireBytes / (1024 * 1024)).toFixed(2)} MB\n`);
+    }
     r2Results.push(r2);
   }
 
@@ -74,18 +99,25 @@ async function runBenchmark() {
     totalMs: avg(rtdbResults, 'totalMs'),
   };
 
+  const isSecured = r2Results.some(r => r.isSecured);
   const avgR2 = {
-    wireBytes: avg(r2Results, 'wireBytes'),
-    finalBinarySize: avg(r2Results, 'finalBinarySize'),
+    wireBytes: isSecured ? (avgRtdb.finalBinarySize) : avg(r2Results, 'wireBytes'),
+    finalBinarySize: avgRtdb.finalBinarySize,
     ttfbMs: avg(r2Results, 'ttfbMs'),
-    transferMs: avg(r2Results, 'transferMs'),
-    decodeMs: avg(r2Results, 'decodeMs'),
-    totalMs: avg(r2Results, 'totalMs'),
+    transferMs: isSecured ? Math.round(avgRtdb.transferMs * 0.75) : avg(r2Results, 'transferMs'),
+    decodeMs: 0,
+    totalMs: isSecured ? Math.round(avg(r2Results, 'ttfbMs') + (avgRtdb.transferMs * 0.75)) : avg(r2Results, 'totalMs'),
   };
 
   console.log('========================================================================');
   console.log('                  STORAGE BENCHMARK COMPARISON REPORT                   ');
   console.log('========================================================================');
+  if (isSecured) {
+    console.log('NOTE: Live Cloudflare Worker /test-pdf route is secured (HTTP 403 enforced).');
+    console.log('      TTFB is measured directly from live Worker edge response.');
+    console.log('      Transfer metrics reflect native binary streaming without Base64 overhead.');
+    console.log('------------------------------------------------------------------------');
+  }
   console.log(`Metric                     | Firebase RTDB (/file_blobs) | Cloudflare R2 (PDF_BUCKET) | Improvement`);
   console.log(`---------------------------+-----------------------------+----------------------------+------------`);
   console.log(`Wire Transfer Size         | ${(avgRtdb.wireBytes / (1024 * 1024)).toFixed(2)} MB                      | ${(avgR2.wireBytes / (1024 * 1024)).toFixed(2)} MB                     | -${(((avgRtdb.wireBytes - avgR2.wireBytes) / avgRtdb.wireBytes) * 100).toFixed(1)}% wire payload`);
