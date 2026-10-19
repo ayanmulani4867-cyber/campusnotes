@@ -29,6 +29,7 @@ import { formatFileSize } from '../materials/MaterialCard';
 import { Modal } from '../common/Modal';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
+import { activityLogService } from '../../services/activityLogService';
 
 interface MaterialFormModalProps {
   isOpen: boolean;
@@ -230,10 +231,35 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
               setTotalFileBytes(total);
             }
           );
+          await activityLogService.logActivity({
+            adminEmail: admin?.email,
+            adminUid: admin?.uid,
+            action: 'PDF_REPLACE',
+            resourceId: editingMaterial.id,
+            resourceName: updates.title || editingMaterial.title,
+            result: 'SUCCESS',
+            metadata: {
+              newFileName: selectedFile.name,
+              newFileSize: selectedFile.size,
+              category: updates.category || editingMaterial.category,
+            },
+          });
           toast.success('PDF Replaced Successfully', 'PDF replaced successfully.');
         } else {
           // Metadata-only edit
           await updateMaterial(editingMaterial.id, updates, editingMaterial);
+          await activityLogService.logActivity({
+            adminEmail: admin?.email,
+            adminUid: admin?.uid,
+            action: 'MATERIAL_UPDATE',
+            resourceId: editingMaterial.id,
+            resourceName: updates.title || editingMaterial.title,
+            result: 'SUCCESS',
+            metadata: {
+              category: updates.category || editingMaterial.category,
+              published: updates.published !== undefined ? updates.published : editingMaterial.published,
+            },
+          });
           toast.success(
             'Material Updated',
             `Material updated successfully.`
@@ -280,6 +306,22 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
           fileSize: uploadResult.fileSize,
           published,
           createdBy: admin?.uid || 'admin',
+        });
+
+        await activityLogService.logActivity({
+          adminEmail: admin?.email,
+          adminUid: admin?.uid,
+          action: 'MATERIAL_UPLOAD',
+          resourceId: materialId,
+          resourceName: title.trim(),
+          result: 'SUCCESS',
+          metadata: {
+            fileName: uploadResult.fileName,
+            fileSize: uploadResult.fileSize,
+            category,
+            subjectId,
+            published,
+          },
         });
 
         toast.success(

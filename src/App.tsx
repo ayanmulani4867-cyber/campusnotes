@@ -7,6 +7,7 @@ import { Footer } from './components/common/Footer';
 import { RefreshCw } from 'lucide-react';
 import { MaintenanceGuard } from './components/common/MaintenanceGuard';
 import { ScrollToTop } from './components/common/ScrollToTop';
+import { useVisitorTracker } from './utils/useVisitorTracker';
 
 // Eager load HomePage for instant hero first-paint
 import { HomePage } from './pages/HomePage';
@@ -53,6 +54,9 @@ const PageLoader: React.FC = () => (
 const AppContent: React.FC = () => {
   const location = useLocation();
   const isAdminDashboard = location.pathname.startsWith('/admin/dashboard');
+
+  // Lightweight visitor analytics tracking across all pages
+  useVisitorTracker();
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans selection:bg-blue-600 selection:text-white w-full max-w-full">

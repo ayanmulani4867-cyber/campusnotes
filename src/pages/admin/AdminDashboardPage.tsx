@@ -22,6 +22,9 @@ import {
   LayoutDashboard,
   GraduationCap,
   ArrowRight,
+  BarChart3,
+  History,
+  HeartPulse,
 } from 'lucide-react';
 import { updateAdminPassword } from '../../services/authService';
 import { Modal } from '../../components/common/Modal';
@@ -50,8 +53,20 @@ import { formatFileSize } from '../../components/materials/MaterialCard';
 import { SubjectManager } from '../../components/admin/SubjectManager';
 import { MaterialFormModal } from '../../components/admin/MaterialFormModal';
 import { ReplacePdfModal } from '../../components/admin/ReplacePdfModal';
+import { VisitorAnalyticsSection } from '../../components/admin/VisitorAnalyticsSection';
+import { AdminActivityLogSection } from '../../components/admin/AdminActivityLogSection';
+import { WebsiteHealthSection } from '../../components/admin/WebsiteHealthSection';
+import { activityLogService } from '../../services/activityLogService';
 
-type AdminTab = 'dashboard' | 'materials' | 'upload' | 'subjects' | 'maintenance';
+type AdminTab =
+  | 'dashboard'
+  | 'materials'
+  | 'upload'
+  | 'subjects'
+  | 'analytics'
+  | 'activity'
+  | 'health'
+  | 'maintenance';
 
 export const AdminDashboardPage: React.FC = () => {
   const { admin, logout } = useAuth();
@@ -108,6 +123,14 @@ export const AdminDashboardPage: React.FC = () => {
     try {
       setIsUpdatingPassword(true);
       await updateAdminPassword(newPasswordInput.trim());
+      await activityLogService.logActivity({
+        adminEmail: admin?.email,
+        adminUid: admin?.uid,
+        action: 'ADMIN_PASSWORD_CHANGE',
+        resourceId: admin?.uid || 'admin',
+        resourceName: 'Administrator Credentials',
+        result: 'SUCCESS',
+      });
       toast.success(
         'Password Updated',
         'Administrator credentials updated successfully.'
@@ -115,6 +138,15 @@ export const AdminDashboardPage: React.FC = () => {
       setPasswordModalOpen(false);
       setNewPasswordInput('');
     } catch (err: unknown) {
+      await activityLogService.logActivity({
+        adminEmail: admin?.email,
+        adminUid: admin?.uid,
+        action: 'ADMIN_PASSWORD_CHANGE',
+        resourceId: admin?.uid || 'admin',
+        resourceName: 'Administrator Credentials',
+        result: 'FAILURE',
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
       toast.error('Update Failed', err instanceof Error ? err.message : String(err));
     } finally {
       setIsUpdatingPassword(false);
@@ -188,11 +220,33 @@ export const AdminDashboardPage: React.FC = () => {
       setMaterials((prev) =>
         prev.map((m) => (m.id === material.id ? { ...m, published: newStatus } : m))
       );
+      await activityLogService.logActivity({
+        adminEmail: admin?.email,
+        adminUid: admin?.uid,
+        action: 'MATERIAL_PUBLISH_TOGGLE',
+        resourceId: material.id,
+        resourceName: material.title,
+        result: 'SUCCESS',
+        metadata: {
+          previousValue: material.published ? 'published' : 'draft',
+          newValue: newStatus ? 'published' : 'draft',
+          published: newStatus,
+        },
+      });
       toast.success(
         newStatus ? 'Material Published' : 'Material Unpublished',
         `"${material.title}" is now ${newStatus ? 'visible to students' : 'saved as draft'}.`
       );
     } catch (err: unknown) {
+      await activityLogService.logActivity({
+        adminEmail: admin?.email,
+        adminUid: admin?.uid,
+        action: 'MATERIAL_PUBLISH_TOGGLE',
+        resourceId: material.id,
+        resourceName: material.title,
+        result: 'FAILURE',
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
       toast.error('Update Failed', err instanceof Error ? err.message : String(err));
     }
   };
@@ -206,8 +260,29 @@ export const AdminDashboardPage: React.FC = () => {
     try {
       await deleteMaterial(material);
       setMaterials((prev) => prev.filter((m) => m.id !== material.id));
+      await activityLogService.logActivity({
+        adminEmail: admin?.email,
+        adminUid: admin?.uid,
+        action: 'MATERIAL_DELETE',
+        resourceId: material.id,
+        resourceName: material.title,
+        result: 'SUCCESS',
+        metadata: {
+          fileName: material.fileName,
+          category: material.category,
+        },
+      });
       toast.success('Material Deleted', `"${material.title}" has been deleted.`);
     } catch (err: unknown) {
+      await activityLogService.logActivity({
+        adminEmail: admin?.email,
+        adminUid: admin?.uid,
+        action: 'MATERIAL_DELETE',
+        resourceId: material.id,
+        resourceName: material.title,
+        result: 'FAILURE',
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
       toast.error('Deletion Failed', err instanceof Error ? err.message : String(err));
     }
   };
@@ -218,6 +293,18 @@ export const AdminDashboardPage: React.FC = () => {
       const nextState = !maintenanceMode;
       await setMaintenanceMode(nextState);
       setMaintenanceModeState(nextState);
+      await activityLogService.logActivity({
+        adminEmail: admin?.email,
+        adminUid: admin?.uid,
+        action: 'MAINTENANCE_TOGGLE',
+        resourceId: 'maintenanceMode',
+        resourceName: 'System Maintenance Mode',
+        result: 'SUCCESS',
+        metadata: {
+          previousValue: maintenanceMode ? 'enabled' : 'disabled',
+          newValue: nextState ? 'enabled' : 'disabled',
+        },
+      });
       toast.success(
         nextState ? 'Maintenance Mode Enabled' : 'Maintenance Mode Disabled',
         nextState
@@ -226,6 +313,15 @@ export const AdminDashboardPage: React.FC = () => {
       );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
+      await activityLogService.logActivity({
+        adminEmail: admin?.email,
+        adminUid: admin?.uid,
+        action: 'MAINTENANCE_TOGGLE',
+        resourceId: 'maintenanceMode',
+        resourceName: 'System Maintenance Mode',
+        result: 'FAILURE',
+        errorMessage: msg,
+      });
       if (msg.includes('PERMISSION_DENIED') || msg.includes('Permission denied')) {
         toast.error('Permission Denied', 'Database write was denied. Please ensure database.rules.json is published in Firebase Console -> Realtime Database -> Rules.');
       } else {
@@ -342,6 +438,22 @@ export const AdminDashboardPage: React.FC = () => {
 
       await createMaterial(newMaterial);
 
+      await activityLogService.logActivity({
+        adminEmail: admin?.email,
+        adminUid: admin?.uid,
+        action: 'MATERIAL_UPLOAD',
+        resourceId: materialId,
+        resourceName: uploadTitle.trim(),
+        result: 'SUCCESS',
+        metadata: {
+          fileName: uploadResult.fileName,
+          fileSize: uploadResult.fileSize,
+          category: uploadType,
+          subjectId: uploadSubjectId,
+          published: uploadPublished,
+        },
+      });
+
       // Optimistically insert into materials state
       setMaterials((prev) => [newMaterial, ...prev]);
 
@@ -357,6 +469,15 @@ export const AdminDashboardPage: React.FC = () => {
       await refreshData();
       setActiveTab('materials');
     } catch (err: unknown) {
+      await activityLogService.logActivity({
+        adminEmail: admin?.email,
+        adminUid: admin?.uid,
+        action: 'MATERIAL_UPLOAD',
+        resourceId: uploadTitle.trim() || 'unknown',
+        resourceName: uploadTitle.trim() || 'Upload Attempt',
+        result: 'FAILURE',
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
       toast.error('Upload Failed', err instanceof Error ? err.message : String(err));
     } finally {
       setIsUploading(false);
@@ -408,6 +529,21 @@ export const AdminDashboardPage: React.FC = () => {
       label: 'Subjects',
       icon: BookOpen,
       count: subjects.length,
+    },
+    {
+      id: 'analytics' as AdminTab,
+      label: 'Visitor Analytics',
+      icon: BarChart3,
+    },
+    {
+      id: 'activity' as AdminTab,
+      label: 'Activity Log',
+      icon: History,
+    },
+    {
+      id: 'health' as AdminTab,
+      label: 'Website Health',
+      icon: HeartPulse,
     },
     {
       id: 'maintenance' as AdminTab,
@@ -705,6 +841,66 @@ export const AdminDashboardPage: React.FC = () => {
                   <span>Manage Subjects</span>
                 </button>
               </div>
+            </div>
+
+            {/* System Intelligence & Monitoring Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <button
+                type="button"
+                onClick={() => setActiveTab('analytics')}
+                className="p-4 rounded-xl border border-slate-200 bg-white hover:border-blue-300 hover:shadow-sm text-left transition-all group"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <BarChart3 className="w-4 h-4" />
+                  </div>
+                  <span className="text-[11px] font-semibold text-blue-600 flex items-center gap-1">
+                    Open <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                  </span>
+                </div>
+                <h4 className="text-xs font-bold text-slate-900 mt-2.5">Visitor Analytics</h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Page views, unique visitors, 7/30d trends & device metrics.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('activity')}
+                className="p-4 rounded-xl border border-slate-200 bg-white hover:border-blue-300 hover:shadow-sm text-left transition-all group"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <History className="w-4 h-4" />
+                  </div>
+                  <span className="text-[11px] font-semibold text-indigo-600 flex items-center gap-1">
+                    Open <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                  </span>
+                </div>
+                <h4 className="text-xs font-bold text-slate-900 mt-2.5">Admin Activity Log</h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Auditable history of uploads, publications, and configurations.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('health')}
+                className="p-4 rounded-xl border border-slate-200 bg-white hover:border-blue-300 hover:shadow-sm text-left transition-all group"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <HeartPulse className="w-4 h-4" />
+                  </div>
+                  <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
+                    Open <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                  </span>
+                </div>
+                <h4 className="text-xs font-bold text-slate-900 mt-2.5">Website Health</h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Availability, latency, error captures & PDF failure status.
+                </p>
+              </button>
             </div>
 
             {/* Recent Materials Section */}
@@ -1407,6 +1603,21 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* ============================================================== */}
+        {/* 6. VISITOR ANALYTICS TAB                                       */}
+        {/* ============================================================== */}
+        {activeTab === 'analytics' && <VisitorAnalyticsSection />}
+
+        {/* ============================================================== */}
+        {/* 7. ADMIN ACTIVITY LOG TAB                                      */}
+        {/* ============================================================== */}
+        {activeTab === 'activity' && <AdminActivityLogSection />}
+
+        {/* ============================================================== */}
+        {/* 8. WEBSITE HEALTH MONITOR TAB                                  */}
+        {/* ============================================================== */}
+        {activeTab === 'health' && <WebsiteHealthSection />}
       </main>
 
       {/* Modals */}

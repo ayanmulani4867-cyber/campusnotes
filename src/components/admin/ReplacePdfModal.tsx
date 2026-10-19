@@ -8,6 +8,8 @@ import {
 import { formatFileSize } from '../materials/MaterialCard';
 import { Modal } from '../common/Modal';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
+import { activityLogService } from '../../services/activityLogService';
 
 interface ReplacePdfModalProps {
   isOpen: boolean;
@@ -23,6 +25,7 @@ export const ReplacePdfModal: React.FC<ReplacePdfModalProps> = ({
   onSuccess,
 }) => {
   const toast = useToast();
+  const { admin } = useAuth();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [bytesUploaded, setBytesUploaded] = useState<number>(0);
@@ -77,6 +80,21 @@ export const ReplacePdfModal: React.FC<ReplacePdfModalProps> = ({
         }
       );
 
+      await activityLogService.logActivity({
+        adminEmail: admin?.email,
+        adminUid: admin?.uid,
+        action: 'PDF_REPLACE',
+        resourceId: material.id,
+        resourceName: material.title,
+        result: 'SUCCESS',
+        metadata: {
+          previousFileName: material.fileName,
+          newFileName: selectedFile.name,
+          newFileSize: selectedFile.size,
+          category: material.category,
+        },
+      });
+
       toast.success(
         'PDF Replaced Successfully',
         'PDF replaced successfully.'
@@ -84,6 +102,15 @@ export const ReplacePdfModal: React.FC<ReplacePdfModalProps> = ({
       onClose();
       await onSuccess();
     } catch (err: unknown) {
+      await activityLogService.logActivity({
+        adminEmail: admin?.email,
+        adminUid: admin?.uid,
+        action: 'PDF_REPLACE',
+        resourceId: material.id,
+        resourceName: material.title,
+        result: 'FAILURE',
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
       toast.error('Replacement Failed', err instanceof Error ? err.message : String(err));
     } finally {
       setIsReplacing(false);

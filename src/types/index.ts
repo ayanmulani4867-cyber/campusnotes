@@ -171,3 +171,6 @@ export interface DashboardStats {
   totalSubjects: number;
   categoryCounts: Record<AcademicCategory, number>;
 }
+
+export * from './adminFeatures';
+

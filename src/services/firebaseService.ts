@@ -32,6 +32,7 @@ import {
 import { INITIAL_DEMO_MATERIALS } from '../constants/initialMaterials';
 import { cacheService } from './cacheService';
 import { compareMaterialsAscending } from '../utils/materialSorting';
+import { healthMonitorService } from './healthMonitorService';
 
 /**
  * Realtime Database limits a single node/leaf string to 10 MB.
@@ -409,7 +410,13 @@ export async function fetchPdfBlobUrl(material: StudyMaterial): Promise<string> 
     return material.downloadUrl;
   }
 
-  throw new Error('PDF document content could not be located in Realtime Database.');
+  const err = new Error('PDF document content could not be located in Realtime Database.');
+  healthMonitorService.recordPdfOperation('PREVIEW', false, {
+    materialId: material.id,
+    fileName: material.fileName,
+    error: err.message,
+  });
+  throw err;
 }
 
 /**
@@ -427,85 +434,111 @@ export async function downloadStudyMaterial(
   materialInput: StudyMaterial,
   onProgress?: (status: string) => void
 ): Promise<void> {
-  // Step 1: Ensure we have the freshest material metadata directly from RTDB
-  let freshMaterial = materialInput;
-  if (database && materialInput.id) {
-    try {
-      const pubSnap = await get(ref(database, `publicMaterials/${materialInput.id}`));
-      if (pubSnap.exists()) {
-        freshMaterial = { ...materialInput, ...pubSnap.val() };
-      } else {
-        const privSnap = await get(ref(database, `materials/${materialInput.id}`)).catch(() => null);
-        if (privSnap && privSnap.exists()) {
-          freshMaterial = { ...materialInput, ...privSnap.val() };
+  try {
+    // Step 1: Ensure we have the freshest material metadata directly from RTDB
+    let freshMaterial = materialInput;
+    if (database && materialInput.id) {
+      try {
+        const pubSnap = await get(ref(database, `publicMaterials/${materialInput.id}`));
+        if (pubSnap.exists()) {
+          freshMaterial = { ...materialInput, ...pubSnap.val() };
+        } else {
+          const privSnap = await get(ref(database, `materials/${materialInput.id}`)).catch(() => null);
+          if (privSnap && privSnap.exists()) {
+            freshMaterial = { ...materialInput, ...privSnap.val() };
+          }
         }
+      } catch {
+        // Proceed with passed materialInput if RTDB read fails
       }
-    } catch {
-      // Proceed with passed materialInput if RTDB read fails
     }
-  }
 
-  // Step 2: Handle static demo PDFs (/demo-pdfs/...)
-  if (freshMaterial.downloadUrl && freshMaterial.downloadUrl.startsWith('/demo-pdfs/')) {
+    // Step 2: Handle static demo PDFs (/demo-pdfs/...)
+    if (freshMaterial.downloadUrl && freshMaterial.downloadUrl.startsWith('/demo-pdfs/')) {
+      const link = document.createElement('a');
+      link.href = freshMaterial.downloadUrl;
+      const safeDemoName = freshMaterial.fileName || `${sanitizeFilename(freshMaterial.title)}.pdf`;
+      link.download = safeDemoName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      healthMonitorService.recordPdfOperation('DOWNLOAD', true, {
+        materialId: freshMaterial.id,
+        fileName: safeDemoName,
+      });
+      return;
+    }
+
+    // Step 3: Handle external HTTP URLs
+    if (freshMaterial.downloadUrl && freshMaterial.downloadUrl.startsWith('http')) {
+      const link = document.createElement('a');
+      link.href = freshMaterial.downloadUrl;
+      const safeHttpName = freshMaterial.fileName || `${sanitizeFilename(freshMaterial.title)}.pdf`;
+      link.download = safeHttpName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      healthMonitorService.recordPdfOperation('DOWNLOAD', true, {
+        materialId: freshMaterial.id,
+        fileName: safeHttpName,
+      });
+      return;
+    }
+
+    // Step 4: Resolve blob ID
+    const blobId = extractBlobId(freshMaterial);
+    if (!blobId) {
+      throw new Error('This study material does not have an associated PDF document in the database.');
+    }
+
+    onProgress?.('Fetching PDF from database...');
+
+    // Step 5: Fetch blob from RTDB /file_blobs/{blobId}
+    const blobRecord = await getMaterialPdfBlob(blobId);
+    if (!blobRecord || !blobRecord.data_base64) {
+      throw new Error('The requested PDF document could not be retrieved from the database or access was denied.');
+    }
+
+    onProgress?.('Preparing file download...');
+
+    // Step 6: Decode Base64 to binary PDF Blob
+    const pdfBlob = base64ToBlob(blobRecord.data_base64, blobRecord.mime_type || 'application/pdf');
+
+    // Step 7: Create object URL and trigger browser download
+    const blobUrl = URL.createObjectURL(pdfBlob);
+    const safeFilename = freshMaterial.fileName || blobRecord.file_name || `${sanitizeFilename(freshMaterial.title)}.pdf`;
+
     const link = document.createElement('a');
-    link.href = freshMaterial.downloadUrl;
-    link.download = freshMaterial.fileName || `${sanitizeFilename(freshMaterial.title)}.pdf`;
+    link.href = blobUrl;
+    link.download = safeFilename;
+    // NOTE: Do not use target="_blank" as it causes popup blocker violations after async operations
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    return;
+
+    // Record successful download
+    healthMonitorService.recordPdfOperation('DOWNLOAD', true, {
+      materialId: freshMaterial.id,
+      fileName: safeFilename,
+    });
+
+    // Step 8: Revoke temporary Blob URL after generous timeout
+    setTimeout(() => {
+      try {
+        URL.revokeObjectURL(blobUrl);
+      } catch {
+        // Ignore
+      }
+    }, 30000);
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    healthMonitorService.recordPdfOperation('DOWNLOAD', false, {
+      materialId: materialInput.id,
+      fileName: materialInput.fileName,
+      error: errorMsg,
+    });
+    throw err;
   }
-
-  // Step 3: Handle external HTTP URLs
-  if (freshMaterial.downloadUrl && freshMaterial.downloadUrl.startsWith('http')) {
-    const link = document.createElement('a');
-    link.href = freshMaterial.downloadUrl;
-    link.download = freshMaterial.fileName || `${sanitizeFilename(freshMaterial.title)}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    return;
-  }
-
-  // Step 4: Resolve blob ID
-  const blobId = extractBlobId(freshMaterial);
-  if (!blobId) {
-    throw new Error('This study material does not have an associated PDF document in the database.');
-  }
-
-  onProgress?.('Fetching PDF from database...');
-
-  // Step 5: Fetch blob from RTDB /file_blobs/{blobId}
-  const blobRecord = await getMaterialPdfBlob(blobId);
-  if (!blobRecord || !blobRecord.data_base64) {
-    throw new Error('The requested PDF document could not be retrieved from the database or access was denied.');
-  }
-
-  onProgress?.('Preparing file download...');
-
-  // Step 6: Decode Base64 to binary PDF Blob
-  const pdfBlob = base64ToBlob(blobRecord.data_base64, blobRecord.mime_type || 'application/pdf');
-
-  // Step 7: Create object URL and trigger browser download
-  const blobUrl = URL.createObjectURL(pdfBlob);
-  const safeFilename = freshMaterial.fileName || blobRecord.file_name || `${sanitizeFilename(freshMaterial.title)}.pdf`;
-
-  const link = document.createElement('a');
-  link.href = blobUrl;
-  link.download = safeFilename;
-  // NOTE: Do not use target="_blank" as it causes popup blocker violations after async operations
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-
-  // Step 8: Revoke temporary Blob URL after generous timeout
-  setTimeout(() => {
-    try {
-      URL.revokeObjectURL(blobUrl);
-    } catch {
-      // Ignore
-    }
-  }, 30000);
 }
 
 // ==========================================
@@ -704,16 +737,31 @@ export async function uploadPdfFile(
     )
   );
 
-  await Promise.race([writePromise, timeoutPromise]);
-  onProgress?.(100, file.size, file.size);
+  try {
+    await Promise.race([writePromise, timeoutPromise]);
+    onProgress?.(100, file.size, file.size);
 
-  return {
-    storagePath,
-    downloadUrl,
-    fileName: file.name,
-    fileSize: file.size,
-    blobId,
-  };
+    healthMonitorService.recordPdfOperation('UPLOAD', true, {
+      materialId,
+      fileName: file.name,
+    });
+
+    return {
+      storagePath,
+      downloadUrl,
+      fileName: file.name,
+      fileSize: file.size,
+      blobId,
+    };
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    healthMonitorService.recordPdfOperation('UPLOAD', false, {
+      materialId,
+      fileName: file.name,
+      error: errorMsg,
+    });
+    throw err;
+  }
 }
 
 /**

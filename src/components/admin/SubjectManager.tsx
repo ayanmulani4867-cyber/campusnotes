@@ -18,6 +18,8 @@ import {
 } from '../../services/firebaseService';
 import { Modal } from '../common/Modal';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
+import { activityLogService } from '../../services/activityLogService';
 
 interface SubjectManagerProps {
   subjects: Subject[];
@@ -31,6 +33,7 @@ export const SubjectManager: React.FC<SubjectManagerProps> = ({
   loading,
 }) => {
   const toast = useToast();
+  const { admin } = useAuth();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
   const [formData, setFormData] = useState({
@@ -87,6 +90,19 @@ export const SubjectManager: React.FC<SubjectManagerProps> = ({
         Boolean(editingSubject)
       );
 
+      await activityLogService.logActivity({
+        adminEmail: admin?.email,
+        adminUid: admin?.uid,
+        action: editingSubject ? 'SUBJECT_UPDATE' : 'SUBJECT_CREATE',
+        resourceId: formData.id,
+        resourceName: `${formData.code.trim().toUpperCase()} - ${formData.name.trim()}`,
+        result: 'SUCCESS',
+        metadata: {
+          code: formData.code.trim().toUpperCase(),
+          active: formData.active,
+        },
+      });
+
       toast.success(
         editingSubject ? 'Subject Updated' : 'Subject Added',
         `${formData.code} - ${formData.name} saved successfully.`
@@ -95,6 +111,15 @@ export const SubjectManager: React.FC<SubjectManagerProps> = ({
       await onRefresh();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
+      await activityLogService.logActivity({
+        adminEmail: admin?.email,
+        adminUid: admin?.uid,
+        action: editingSubject ? 'SUBJECT_UPDATE' : 'SUBJECT_CREATE',
+        resourceId: formData.id,
+        resourceName: `${formData.code.trim().toUpperCase()} - ${formData.name.trim()}`,
+        result: 'FAILURE',
+        errorMessage: msg,
+      });
       if (msg.includes('PERMISSION_DENIED') || msg.includes('Permission denied')) {
         toast.error('Permission Denied', 'Database write was denied. Please ensure database.rules.json is published in Firebase Console -> Realtime Database -> Rules.');
       } else {
@@ -113,9 +138,26 @@ export const SubjectManager: React.FC<SubjectManagerProps> = ({
 
     try {
       await deleteSubject(subject.id);
+      await activityLogService.logActivity({
+        adminEmail: admin?.email,
+        adminUid: admin?.uid,
+        action: 'SUBJECT_DELETE',
+        resourceId: subject.id,
+        resourceName: `${subject.code} - ${subject.name}`,
+        result: 'SUCCESS',
+      });
       toast.success('Subject Removed', `${subject.code} has been deleted.`);
       await onRefresh();
     } catch (err: unknown) {
+      await activityLogService.logActivity({
+        adminEmail: admin?.email,
+        adminUid: admin?.uid,
+        action: 'SUBJECT_DELETE',
+        resourceId: subject.id,
+        resourceName: `${subject.code} - ${subject.name}`,
+        result: 'FAILURE',
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
       toast.error('Cannot Delete Subject', err instanceof Error ? err.message : String(err));
     }
   };
@@ -132,6 +174,17 @@ export const SubjectManager: React.FC<SubjectManagerProps> = ({
         },
         true
       );
+      await activityLogService.logActivity({
+        adminEmail: admin?.email,
+        adminUid: admin?.uid,
+        action: 'SUBJECT_UPDATE',
+        resourceId: subject.id,
+        resourceName: `${subject.code} - ${subject.name}`,
+        result: 'SUCCESS',
+        metadata: {
+          active: !subject.active,
+        },
+      });
       toast.info(
         subject.active ? 'Subject Deactivated' : 'Subject Activated',
         `${subject.code} visibility updated.`
