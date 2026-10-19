@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "campusnotes-pdf-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-19",
+  "compatibility_flags": ["nodejs_compat"],
+  "r2_buckets": [
+    {
+      "binding": "PDF_BUCKET",
+      "bucket_name": "campusnotes-pdfs"
+    }
+  ],
+  "vars": {
+    "FIREBASE_PROJECT_ID": "campusnotes-e62cf",
+    "FIREBASE_DATABASE_URL": "https://campusnotes-e62cf-default-rtdb.firebaseio.com",
+    "ALLOWED_ORIGINS": "https://campusnotes-ifpr.onrender.com,http://localhost:5173,http://localhost:4173,http://localhost:3000"
+  }
+}

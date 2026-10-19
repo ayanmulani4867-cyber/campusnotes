@@ -21,6 +21,7 @@ import {
 import { WebsiteHealthStatus } from '../../types';
 import { healthMonitorService } from '../../services/healthMonitorService';
 import { useToast } from '../../context/ToastContext';
+import { R2_WORKER_URL } from '../../config/firebase';
 
 export const WebsiteHealthSection: React.FC = () => {
   const toast = useToast();
@@ -464,12 +465,16 @@ export const WebsiteHealthSection: React.FC = () => {
 
           <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
             <span className="text-slate-500 block text-[11px]">Storage Engine</span>
-            <span className="font-mono font-semibold text-slate-900">Realtime Database (/file_blobs)</span>
+            <span className="font-mono font-semibold text-slate-900">
+              {R2_WORKER_URL ? 'Cloudflare R2 + RTDB Hybrid' : 'Realtime Database (/file_blobs)'}
+            </span>
           </div>
 
           <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
             <span className="text-slate-500 block text-[11px]">Max PDF Size Standard</span>
-            <span className="font-mono font-semibold text-slate-900">6.0 MB Raw Binary (~8 MB Base64)</span>
+            <span className="font-mono font-semibold text-slate-900">
+              {R2_WORKER_URL ? '50 MB (Cloudflare R2)' : '6.0 MB Raw Binary (~8 MB Base64)'}
+            </span>
           </div>
         </div>
       </div>

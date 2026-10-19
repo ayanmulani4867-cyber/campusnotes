@@ -129,6 +129,9 @@ export interface StudyMaterial {
   storagePath: string;
   downloadUrl: string;
   blobId?: string; // Reference to RTDB /file_blobs/{blobId}
+  storageProvider?: 'firebase' | 'r2'; // Storage backend: Firebase RTDB or Cloudflare R2
+  r2Key?: string; // Cloudflare R2 object key
+  r2Url?: string; // Direct / Worker URL for R2 document
   fileSize: number; // in bytes
   published: boolean;
   createdAt: number;

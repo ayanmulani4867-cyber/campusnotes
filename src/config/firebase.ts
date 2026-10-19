@@ -5,6 +5,8 @@ import { getDatabase, Database } from 'firebase/database';
 export const DEFAULT_DATABASE_URL = 'https://campusnotes-e62cf-default-rtdb.firebaseio.com/';
 export const DEFAULT_PROJECT_ID = 'campusnotes-e62cf';
 export const DEFAULT_STORAGE_BUCKET = 'campusnotes-e62cf.firebasestorage.app';
+export const DEFAULT_R2_WORKER_URL = 'https://campusnotes-pdf-api.ayanmull8886.workers.dev';
+export const R2_WORKER_URL = import.meta.env.VITE_R2_WORKER_URL || DEFAULT_R2_WORKER_URL;
 
 // Read environment variables
 const apiKey = import.meta.env.VITE_FIREBASE_API_KEY || '';

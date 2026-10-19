@@ -16,7 +16,13 @@ type RtdbSnapshot = {
   val(): any;
 };
 
-import { database, isFirebaseConfigured } from '../config/firebase';
+import {
+  database,
+  isFirebaseConfigured,
+  auth,
+  R2_WORKER_URL,
+  DEFAULT_R2_WORKER_URL,
+} from '../config/firebase';
 import {
   Subject,
   StudyMaterial,
@@ -49,8 +55,9 @@ async function loadDemoMaterials(): Promise<StudyMaterial[]> {
  * A 6 MB raw PDF produces approximately 8.0 MB of Base64, leaving ample headroom
  * under the 10 MB limit for JSON metadata and WebSocket frame overhead.
  */
-export const MAX_RTDB_PDF_SIZE_BYTES = 6 * 1024 * 1024; // 6 MB max raw PDF size
-export const MAX_FILE_SIZE_BYTES = MAX_RTDB_PDF_SIZE_BYTES;
+export const MAX_RTDB_PDF_SIZE_BYTES = 6 * 1024 * 1024; // 6 MB max raw PDF size for RTDB Base64 storage
+export const MAX_R2_PDF_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB max raw PDF size for Cloudflare R2
+export const MAX_FILE_SIZE_BYTES = MAX_R2_PDF_SIZE_BYTES;
 
 // In-memory cache for created object URLs to prevent duplicate memory allocation
 const objectUrlMemoryCache = new Map<string, string>();
@@ -532,6 +539,141 @@ export async function getOrFetchPdfBlob(
 }
 
 /**
+ * Helper to determine if a material is stored in Cloudflare R2
+ */
+export function isR2Material(material?: Partial<StudyMaterial> | null): boolean {
+  if (!material) return false;
+  if (material.storageProvider === 'r2') return true;
+  if (material.r2Key && typeof material.r2Key === 'string' && material.r2Key.trim().length > 0) return true;
+  if (material.storagePath && typeof material.storagePath === 'string' && material.storagePath.startsWith('r2://')) return true;
+  if (material.downloadUrl && typeof material.downloadUrl === 'string') {
+    if (material.downloadUrl.startsWith('r2://') || material.downloadUrl.includes('workers.dev')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Construct the canonical R2 Worker URL for a given material
+ */
+export function getR2PdfUrl(materialId: string, options?: { download?: boolean }): string {
+  const baseUrl = (R2_WORKER_URL || DEFAULT_R2_WORKER_URL).replace(/\/+$/, '');
+  const downloadParam = options?.download ? '?download=1' : '';
+  return `${baseUrl}/materials/${encodeURIComponent(materialId)}/pdf${downloadParam}`;
+}
+
+/**
+ * Retrieves a PDF blob stored in Cloudflare R2:
+ * Uses fast native HTTP streaming fetch with progress telemetry and memory caching.
+ * Attaches admin authorization header when available to allow previewing unpublished drafts.
+ */
+export async function getOrFetchR2PdfBlob(
+  material: StudyMaterial,
+  onProgress?: (status: string) => void
+): Promise<CachedPdfBlob> {
+  const cacheKey = material.r2Key || `r2_${material.id}`;
+
+  // 1. Check in-memory session cache (0 ms instant response, 0 network)
+  const cached = pdfBlobSessionCache.get(cacheKey);
+  if (cached) {
+    onProgress?.('Ready from session cache');
+    return cached;
+  }
+
+  // 2. Check in-flight requests (deduplicates concurrent preview + download)
+  const existingPromise = inFlightPdfRequests.get(cacheKey);
+  if (existingPromise) {
+    onProgress?.('Connecting to active download...');
+    return await existingPromise;
+  }
+
+  // 3. Initiate single optimized fetch and register in flight
+  const fetchPromise = (async () => {
+    try {
+      onProgress?.('Connecting to Cloudflare R2 storage...');
+      const targetUrl = material.r2Url || getR2PdfUrl(material.id);
+
+      const headers: Record<string, string> = {};
+      if (auth?.currentUser) {
+        try {
+          const token = await auth.currentUser.getIdToken();
+          if (token) headers['Authorization'] = `Bearer ${token}`;
+        } catch {
+          // Public view
+        }
+      }
+
+      const response = await fetch(targetUrl, { headers });
+      if (!response.ok) {
+        if (response.status === 403) {
+          throw new Error('Access denied: This study material is unpublished or restricted.');
+        }
+        if (response.status === 404) {
+          throw new Error('The requested PDF document was not found in Cloudflare R2 storage.');
+        }
+        throw new Error(`Failed to download PDF document from storage (HTTP ${response.status}).`);
+      }
+
+      const contentLength = response.headers.get('content-length');
+      const totalBytes = contentLength ? parseInt(contentLength, 10) : (material.fileSize || 0);
+
+      let blob: Blob;
+
+      if (response.body && totalBytes > 0 && typeof onProgress === 'function') {
+        const reader = response.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let receivedBytes = 0;
+        let lastReportedPercent = -1;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            chunks.push(value);
+            receivedBytes += value.length;
+            const percent = Math.min(99, Math.round((receivedBytes / totalBytes) * 100));
+            if (percent !== lastReportedPercent) {
+              lastReportedPercent = percent;
+              const mbReceived = (receivedBytes / (1024 * 1024)).toFixed(1);
+              const mbTotal = (totalBytes / (1024 * 1024)).toFixed(1);
+              onProgress(`Downloading PDF: ${percent}% (${mbReceived} MB / ${mbTotal} MB)...`);
+            }
+          }
+        }
+
+        blob = new Blob(chunks as BlobPart[], { type: 'application/pdf' });
+      } else {
+        blob = await response.blob();
+      }
+
+      onProgress?.('Preparing file...');
+      const objectUrl = URL.createObjectURL(blob);
+      const safeFilename = material.fileName || `${sanitizeFilename(material.title || 'study_material')}.pdf`;
+
+      const cachedEntry: CachedPdfBlob = {
+        blob,
+        objectUrl,
+        fileName: safeFilename,
+        mimeType: 'application/pdf',
+        sizeBytes: blob.size,
+      };
+
+      // Store in session cache
+      pdfBlobSessionCache.set(cacheKey, cachedEntry);
+      objectUrlMemoryCache.set(cacheKey, objectUrl);
+
+      return cachedEntry;
+    } finally {
+      inFlightPdfRequests.delete(cacheKey);
+    }
+  })();
+
+  inFlightPdfRequests.set(cacheKey, fetchPromise);
+  return await fetchPromise;
+}
+
+/**
  * Helper to safely extract blob ID from any material object representation
  */
 export function extractBlobId(
@@ -569,6 +711,7 @@ export function sanitizeFilename(name: string): string {
 
 /**
  * Resolves a preview and download URL for any material.
+ * - If stored in Cloudflare R2: streams from R2 Worker directly.
  * - If stored as Base64 in RTDB (/file_blobs/): fetches on demand, decodes to Blob, creates a blob: URL.
  * - If legacy URL (/demo-pdfs/ or external HTTP): returns the URL directly.
  */
@@ -581,7 +724,13 @@ export async function fetchPdfBlobUrl(
     return material.downloadUrl;
   }
 
-  // 2. Resolve blobId from material metadata
+  // 2. Direct path for Cloudflare R2 materials
+  if (isR2Material(material)) {
+    const cachedEntry = await getOrFetchR2PdfBlob(material, onProgress);
+    return cachedEntry.objectUrl;
+  }
+
+  // 3. Resolve blobId from material metadata
   let blobId = extractBlobId(material);
 
   // If blobId wasn't found in current object, check the database for fresh metadata
@@ -589,11 +738,21 @@ export async function fetchPdfBlobUrl(
     try {
       const pubSnap = await get(ref(database, `publicMaterials/${material.id}`));
       if (pubSnap.exists()) {
-        blobId = extractBlobId(pubSnap.val());
+        const val = pubSnap.val();
+        if (isR2Material(val)) {
+          const cachedEntry = await getOrFetchR2PdfBlob({ ...material, ...val }, onProgress);
+          return cachedEntry.objectUrl;
+        }
+        blobId = extractBlobId(val);
       } else {
         const matSnap = await get(ref(database, `materials/${material.id}`)).catch(() => null);
         if (matSnap && matSnap.exists()) {
-          blobId = extractBlobId(matSnap.val());
+          const val = matSnap.val();
+          if (isR2Material(val)) {
+            const cachedEntry = await getOrFetchR2PdfBlob({ ...material, ...val }, onProgress);
+            return cachedEntry.objectUrl;
+          }
+          blobId = extractBlobId(val);
         }
       }
     } catch {
@@ -606,12 +765,12 @@ export async function fetchPdfBlobUrl(
     return cachedEntry.objectUrl;
   }
 
-  // 3. Fallback to existing downloadUrl if valid HTTP URL
+  // 4. Fallback to existing downloadUrl if valid HTTP URL
   if (material.downloadUrl && material.downloadUrl.startsWith('http')) {
     return material.downloadUrl;
   }
 
-  const err = new Error('PDF document content could not be located in Realtime Database.');
+  const err = new Error('PDF document content could not be located in storage.');
   healthMonitorService.recordPdfOperation('PREVIEW', false, {
     materialId: material.id,
     fileName: material.fileName,
@@ -623,9 +782,10 @@ export async function fetchPdfBlobUrl(
 /**
  * Safely downloads a study material for public or admin users:
  * 1. Checks if it's a local demo PDF or external HTTP URL.
- * 2. Extracts blobId directly from materialInput without extra database roundtrips.
- * 3. Reuses already downloaded blob from session cache (0 ms instant download) or joins in-flight request.
- * 4. Triggers programmatic browser download without popup blockers (no target=_blank).
+ * 2. Checks if stored in Cloudflare R2 -> streams from R2 Worker directly.
+ * 3. Extracts blobId directly from materialInput without extra database roundtrips.
+ * 4. Reuses already downloaded blob from session cache (0 ms instant download) or joins in-flight request.
+ * 5. Triggers programmatic browser download without popup blockers (no target=_blank).
  */
 export async function downloadStudyMaterial(
   materialInput: StudyMaterial,
@@ -648,8 +808,12 @@ export async function downloadStudyMaterial(
       return;
     }
 
-    // Step 2: Handle external HTTP URLs
-    if (materialInput.downloadUrl && materialInput.downloadUrl.startsWith('http')) {
+    // Step 2: Handle external HTTP URLs (excluding R2 worker routes which are handled below)
+    if (
+      materialInput.downloadUrl &&
+      materialInput.downloadUrl.startsWith('http') &&
+      !materialInput.downloadUrl.includes('workers.dev')
+    ) {
       const link = document.createElement('a');
       link.href = materialInput.downloadUrl;
       const safeHttpName = materialInput.fileName || `${sanitizeFilename(materialInput.title)}.pdf`;
@@ -664,6 +828,31 @@ export async function downloadStudyMaterial(
       return;
     }
 
+    // Step 2.5: Handle Cloudflare R2 Storage Provider
+    if (isR2Material(materialInput)) {
+      onProgress?.('Fetching PDF from Cloudflare R2...');
+      const cachedEntry = await getOrFetchR2PdfBlob(materialInput, onProgress);
+
+      onProgress?.('Starting download...');
+      const safeFilename =
+        materialInput.fileName ||
+        cachedEntry.fileName ||
+        `${sanitizeFilename(materialInput.title || 'study_material')}.pdf`;
+
+      const link = document.createElement('a');
+      link.href = cachedEntry.objectUrl;
+      link.download = safeFilename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      healthMonitorService.recordPdfOperation('DOWNLOAD', true, {
+        materialId: materialInput.id,
+        fileName: safeFilename,
+      });
+      return;
+    }
+
     // Step 3: Extract blobId without redundant database query if already present
     let blobId = extractBlobId(materialInput);
     let freshMaterial = materialInput;
@@ -673,12 +862,20 @@ export async function downloadStudyMaterial(
       try {
         const pubSnap = await get(ref(database, `publicMaterials/${materialInput.id}`));
         if (pubSnap.exists()) {
-          freshMaterial = { ...materialInput, ...pubSnap.val() };
+          const val = pubSnap.val();
+          if (isR2Material(val)) {
+            return downloadStudyMaterial({ ...materialInput, ...val }, onProgress);
+          }
+          freshMaterial = { ...materialInput, ...val };
           blobId = extractBlobId(freshMaterial);
         } else {
           const privSnap = await get(ref(database, `materials/${materialInput.id}`)).catch(() => null);
           if (privSnap && privSnap.exists()) {
-            freshMaterial = { ...materialInput, ...privSnap.val() };
+            const val = privSnap.val();
+            if (isR2Material(val)) {
+              return downloadStudyMaterial({ ...materialInput, ...val }, onProgress);
+            }
+            freshMaterial = { ...materialInput, ...val };
             blobId = extractBlobId(freshMaterial);
           }
         }
@@ -688,7 +885,7 @@ export async function downloadStudyMaterial(
     }
 
     if (!blobId) {
-      throw new Error('This study material does not have an associated PDF document in the database.');
+      throw new Error('This study material does not have an associated PDF document in storage.');
     }
 
     // Step 4: Fetch (or reuse from session cache / active in-flight download)
@@ -850,8 +1047,126 @@ export async function getAllMaterialsAdmin(): Promise<StudyMaterial[]> {
 }
 
 /**
- * Upload PDF directly to Firebase Realtime Database as Base64.
- * Validates format, %PDF- magic bytes, and enforces the 6 MB raw file limit.
+ * Upload PDF directly to Cloudflare R2 via the Cloudflare Worker API.
+ * Uses native XMLHttpRequest to report accurate upload progress telemetry.
+ */
+export async function uploadPdfToR2(
+  file: File,
+  materialId: string,
+  onProgress?: (percent: number, bytesTransferred: number, totalBytes: number) => void
+): Promise<{
+  storagePath: string;
+  downloadUrl: string;
+  fileName: string;
+  fileSize: number;
+  r2Key: string;
+  storageProvider: 'r2';
+}> {
+  if (!auth?.currentUser) {
+    throw new Error('Administrator authentication required for R2 PDF upload.');
+  }
+
+  const token = await auth.currentUser.getIdToken();
+  const workerBase = (R2_WORKER_URL || DEFAULT_R2_WORKER_URL).replace(/\/+$/, '');
+  const sanitizedName = sanitizeFilename(file.name);
+  const uploadUrl = `${workerBase}/materials/${encodeURIComponent(materialId)}/pdf?filename=${encodeURIComponent(sanitizedName)}`;
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', uploadUrl, true);
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.setRequestHeader('Content-Type', 'application/pdf');
+    xhr.setRequestHeader('X-Filename', encodeURIComponent(sanitizedName));
+
+    if (xhr.upload && typeof onProgress === 'function') {
+      xhr.upload.onprogress = (evt) => {
+        if (evt.lengthComputable) {
+          const percent = Math.min(99, Math.round((evt.loaded / evt.total) * 100));
+          onProgress(percent, evt.loaded, evt.total);
+        }
+      };
+    }
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const res = JSON.parse(xhr.responseText);
+          onProgress?.(100, file.size, file.size);
+          resolve({
+            storagePath: res.storagePath || `r2://${res.r2Key}`,
+            downloadUrl: res.downloadUrl,
+            fileName: res.fileName || file.name,
+            fileSize: res.fileSize || file.size,
+            r2Key: res.r2Key,
+            storageProvider: 'r2',
+          });
+        } catch (parseErr) {
+          reject(new Error(`Failed to parse R2 upload response: ${parseErr}`));
+        }
+      } else {
+        let errorMsg = `R2 upload failed with status ${xhr.status}`;
+        try {
+          const res = JSON.parse(xhr.responseText);
+          if (res.error) errorMsg = res.error;
+        } catch {
+          // ignore
+        }
+        reject(new Error(errorMsg));
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error('Network error occurred during R2 PDF upload.'));
+    };
+
+    xhr.ontimeout = () => {
+      reject(new Error('R2 PDF upload timed out.'));
+    };
+
+    xhr.timeout = 60000;
+    xhr.send(file);
+  });
+}
+
+/**
+ * Delete a PDF object from Cloudflare R2
+ */
+export async function deletePdfFromR2(materialId: string, r2Key?: string): Promise<boolean> {
+  if (!auth?.currentUser) {
+    console.warn('Cannot delete R2 PDF: No authenticated administrator.');
+    return false;
+  }
+  try {
+    const token = await auth.currentUser.getIdToken();
+    const workerBase = (R2_WORKER_URL || DEFAULT_R2_WORKER_URL).replace(/\/+$/, '');
+    const deleteUrl = `${workerBase}/materials/${encodeURIComponent(materialId)}/pdf${r2Key ? `?key=${encodeURIComponent(r2Key)}` : ''}`;
+    const res = await fetch(deleteUrl, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn(`Notice deleting R2 PDF for material ${materialId}:`, err);
+    return false;
+  }
+}
+
+export interface UploadPdfResult {
+  storagePath: string;
+  downloadUrl: string;
+  fileName: string;
+  fileSize: number;
+  blobId?: string;
+  storageProvider?: 'firebase' | 'r2';
+  r2Key?: string;
+  r2Url?: string;
+}
+
+/**
+ * Upload PDF with Cloudflare R2 preference and Realtime Database fallback.
+ * Authenticated admins upload directly to R2; unauthenticated or fallback uploads use RTDB Base64.
  */
 export async function uploadPdfFile(
   file: File,
@@ -859,17 +1174,51 @@ export async function uploadPdfFile(
   materialId: string,
   onProgress?: (percent: number, bytesTransferred: number, totalBytes: number) => void,
   isPublished: boolean = true
-): Promise<{ storagePath: string; downloadUrl: string; fileName: string; fileSize: number; blobId: string }> {
-  if (!database) {
-    throw new Error('Firebase Realtime Database is not initialized.');
-  }
-
+): Promise<UploadPdfResult> {
   // 1. File type and extension validation
   if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
     throw new Error('Only valid PDF documents (.pdf) are permitted.');
   }
 
-  // 2. Strict file size validation (6 MB max for RTDB storage)
+  // 2. Binary header signature validation (%PDF-)
+  const isSignatureValid = await validatePdfSignature(file);
+  if (!isSignatureValid) {
+    throw new Error('Invalid file format: File header does not match standard PDF signature (%PDF-).');
+  }
+
+  // 3. Try Cloudflare R2 Upload first if admin is authenticated
+  if (auth?.currentUser && (R2_WORKER_URL || DEFAULT_R2_WORKER_URL)) {
+    if (file.size <= MAX_R2_PDF_SIZE_BYTES) {
+      try {
+        const r2Result = await uploadPdfToR2(file, materialId, onProgress);
+        healthMonitorService.recordPdfOperation('UPLOAD', true, {
+          materialId,
+          fileName: file.name,
+        });
+        return {
+          storagePath: r2Result.storagePath,
+          downloadUrl: r2Result.downloadUrl,
+          fileName: r2Result.fileName,
+          fileSize: r2Result.fileSize,
+          storageProvider: 'r2',
+          r2Key: r2Result.r2Key,
+          r2Url: r2Result.downloadUrl,
+        };
+      } catch (r2Err) {
+        console.warn('R2 upload notice: Falling back to Firebase RTDB storage.', r2Err);
+      }
+    } else {
+      throw new Error(
+        `File size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds maximum allowed limit of 50 MB.`
+      );
+    }
+  }
+
+  // 4. Strict file size validation for Realtime Database storage (6 MB max)
+  if (!database) {
+    throw new Error('Firebase Realtime Database is not initialized.');
+  }
+
   if (file.size > MAX_RTDB_PDF_SIZE_BYTES) {
     const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
     throw new Error(
@@ -877,19 +1226,13 @@ export async function uploadPdfFile(
     );
   }
 
-  // 3. Binary header signature validation (%PDF-)
-  const isSignatureValid = await validatePdfSignature(file);
-  if (!isSignatureValid) {
-    throw new Error('Invalid file format: File header does not match standard PDF signature (%PDF-).');
-  }
-
-  // 4. Asynchronous Base64 conversion off the main thread
+  // 5. Asynchronous Base64 conversion off the main thread for RTDB fallback
   onProgress?.(10, Math.round(file.size * 0.1), file.size);
   const base64Data = await fileToBase64Async(file, onProgress);
   onProgress?.(50, Math.round(file.size * 0.5), file.size);
 
   const timestamp = Date.now();
-  const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const sanitizedName = sanitizeFilename(file.name);
   const blobId = `blob_${materialId}_${timestamp}`;
   const storagePath = `rtdb://file_blobs/${blobId}`;
   const downloadUrl = `rtdb://${blobId}`;
@@ -907,7 +1250,7 @@ export async function uploadPdfFile(
 
   onProgress?.(70, Math.round(file.size * 0.7), file.size);
 
-  // 5. Save blob to RTDB /file_blobs/{blobId} with a 45-second timeout guard
+  // 6. Save blob to RTDB /file_blobs/{blobId} with a 45-second timeout guard
   const writePromise = set(ref(database, `file_blobs/${blobId}`), blobRecord);
   const timeoutPromise = new Promise<never>((_, reject) =>
     setTimeout(
@@ -936,6 +1279,7 @@ export async function uploadPdfFile(
       fileName: file.name,
       fileSize: file.size,
       blobId,
+      storageProvider: 'firebase',
     };
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
@@ -977,7 +1321,7 @@ export async function isBlobReferencedByOthers(
 
 /**
  * Save new study material with metadata in /materials and /publicMaterials.
- * If saving metadata fails, cleans up the uploaded blob to avoid orphans.
+ * If saving metadata fails, cleans up the uploaded blob or R2 object to avoid orphans.
  */
 export async function createMaterial(
   data: Omit<StudyMaterial, 'createdAt' | 'updatedAt'>
@@ -985,24 +1329,39 @@ export async function createMaterial(
   if (!database) throw new Error('Database not initialized');
 
   const now = Date.now();
-  const fullData: StudyMaterial = {
+  const fullData: Record<string, unknown> = {
     ...data,
     createdAt: now,
     updatedAt: now,
   };
 
+  // Strip undefined keys so Firebase RTDB set/update never throws
+  const cleanData: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(fullData)) {
+    if (value !== undefined) {
+      cleanData[key] = value;
+    }
+  }
+
   const updates: Record<string, unknown> = {};
-  updates[`materials/${data.id}`] = fullData;
+  updates[`materials/${data.id}`] = cleanData;
 
   if (data.published) {
-    updates[`publicMaterials/${data.id}`] = fullData;
+    updates[`publicMaterials/${data.id}`] = cleanData;
   }
 
   try {
     await update(ref(database), updates);
     cacheService.clearAll();
   } catch (dbError) {
-    console.error('Metadata creation failed. Performing orphan cleanup on file_blobs...', dbError);
+    console.error('Metadata creation failed. Performing orphan cleanup...', dbError);
+    if (data.storageProvider === 'r2' && data.r2Key) {
+      try {
+        await deletePdfFromR2(data.id, data.r2Key);
+      } catch {
+        // Ignore
+      }
+    }
     if (data.blobId) {
       try {
         await remove(ref(database, `file_blobs/${data.blobId}`));
@@ -1027,43 +1386,55 @@ export async function updateMaterial(
   if (!database) throw new Error('Database not initialized');
 
   const now = Date.now();
-  const merged: StudyMaterial = {
+  const merged: Record<string, unknown> = {
     ...existingMaterial,
     ...updatedData,
     updatedAt: now,
   };
 
-  const updates: Record<string, unknown> = {};
-  updates[`materials/${id}`] = merged;
+  // Strip undefined keys
+  const cleanData: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(merged)) {
+    if (value !== undefined) {
+      cleanData[key] = value;
+    }
+  }
 
-  if (merged.published) {
-    updates[`publicMaterials/${id}`] = merged;
+  const updates: Record<string, unknown> = {};
+  updates[`materials/${id}`] = cleanData;
+
+  const isPublished = Boolean(cleanData.published);
+  if (isPublished) {
+    updates[`publicMaterials/${id}`] = cleanData;
   } else {
     updates[`publicMaterials/${id}`] = null;
   }
 
-  // Synchronize published state to the file blob record so security rules stay consistent
-  if (merged.blobId && merged.published !== existingMaterial.published) {
-    updates[`file_blobs/${merged.blobId}/published`] = merged.published;
+  // Synchronize published state to the file blob record if present so security rules stay consistent
+  const blobId = (cleanData.blobId as string) || existingMaterial.blobId;
+  if (blobId && isPublished !== existingMaterial.published) {
+    updates[`file_blobs/${blobId}/published`] = isPublished;
   }
 
   await update(ref(database), updates);
   cacheService.clearAll();
-  if (merged.blobId && !merged.published) {
-    revokeBlobUrl(merged.blobId);
+  if (blobId && !isPublished) {
+    revokeBlobUrl(blobId);
+  }
+  if (existingMaterial.r2Key && !isPublished) {
+    revokeBlobUrl(existingMaterial.r2Key);
   }
 }
 
 /**
  * Replace material PDF safely:
- * 1. Fetches current material from RTDB to ensure fresh metadata and accurate old blob ID.
- * 2. Uploads replacement to RTDB under a new versioned blobId.
- * 3. Reads back the replacement blob and verifies Base64 and valid %PDF- header.
- * 4. Atomically updates database metadata in /materials, /publicMaterials, and blob published flag.
- * 5. Verifies metadata in RTDB now points to the new blobId.
- * 6. Invalidates caches (sessionStorage and in-memory Blob URL cache).
- * 7. Deletes the old blob only after metadata confirms AND only if not shared.
- * 8. Cleans up the new blob if metadata update or verification fails (rollback).
+ * 1. Fetches current material from RTDB to ensure fresh metadata.
+ * 2. Uploads replacement PDF (R2 or RTDB fallback).
+ * 3. Verifies replacement accessibility and signature.
+ * 4. Atomically updates database metadata in /materials, /publicMaterials, and published flags.
+ * 5. Invalidates caches (sessionStorage and in-memory Blob URL cache).
+ * 6. Deletes old R2 file or RTDB blob only after replacement is confirmed accessible.
+ * 7. Rolls back new upload if metadata update fails.
  */
 export async function replaceMaterialPdf(
   material: StudyMaterial,
@@ -1072,7 +1443,13 @@ export async function replaceMaterialPdf(
     | Partial<StudyMaterial>
     | ((percent: number, bytesTransferred: number, totalBytes: number) => void),
   onProgress?: (percent: number, bytesTransferred: number, totalBytes: number) => void
-): Promise<{ fileName: string; downloadUrl: string; blobId: string }> {
+): Promise<{
+  fileName: string;
+  downloadUrl: string;
+  blobId?: string;
+  storageProvider?: 'firebase' | 'r2';
+  r2Key?: string;
+}> {
   if (!database) throw new Error('Database not initialized');
 
   let additionalMetadataUpdates: Partial<StudyMaterial> | undefined;
@@ -1085,7 +1462,7 @@ export async function replaceMaterialPdf(
     additionalMetadataUpdates = additionalMetadataOrProgress;
   }
 
-  // 1. Fetch current material from RTDB to ensure we have fresh metadata and accurate old blob ID
+  // 1. Fetch current material from RTDB to ensure fresh metadata
   let currentMaterial = material;
   try {
     const currentSnap = await get(ref(database, `materials/${material.id}`));
@@ -1097,12 +1474,13 @@ export async function replaceMaterialPdf(
   }
 
   const oldBlobId = extractBlobId(currentMaterial) || extractBlobId(material);
+  const oldR2Key = currentMaterial.r2Key;
   const isPublished =
     additionalMetadataUpdates?.published !== undefined
       ? additionalMetadataUpdates.published
       : (currentMaterial.published ?? material.published ?? true);
 
-  // 2. Upload replacement PDF to RTDB under new versioned blobId
+  // 2. Upload replacement PDF
   const uploadResult = await uploadPdfFile(
     newFile,
     additionalMetadataUpdates?.subjectId || currentMaterial.subjectId || material.subjectId,
@@ -1112,59 +1490,75 @@ export async function replaceMaterialPdf(
   );
 
   try {
-    // 3. Read the blob back and verify it is valid Base64 and decodes to a valid PDF
-    const verifyBlobSnap = await get(ref(database, `file_blobs/${uploadResult.blobId}`));
-    if (!verifyBlobSnap.exists()) {
-      throw new Error('Verification failed: Replacement PDF blob could not be confirmed in database.');
-    }
-    const verifiedBlob = verifyBlobSnap.val() as FileBlobRecord;
-    if (!verifiedBlob || !verifiedBlob.data_base64 || verifiedBlob.data_base64.length < 10) {
-      throw new Error('Verification failed: Replacement PDF blob has empty or corrupted data.');
-    }
-    try {
-      const headerSample = atob(verifiedBlob.data_base64.slice(0, 64));
-      if (!headerSample.startsWith('%PDF-')) {
-        throw new Error('Verification failed: Decoded replacement data does not match PDF signature (%PDF-).');
+    // 3. Verify upload integrity
+    if (uploadResult.storageProvider === 'r2') {
+      if (!uploadResult.r2Key) {
+        throw new Error('Verification failed: Replacement R2 upload did not return an object key.');
       }
-    } catch (decodeErr) {
-      throw new Error(`Verification failed: Decoded replacement data is not valid Base64 PDF: ${decodeErr}`);
+    } else if (uploadResult.blobId) {
+      const verifyBlobSnap = await get(ref(database, `file_blobs/${uploadResult.blobId}`));
+      if (!verifyBlobSnap.exists()) {
+        throw new Error('Verification failed: Replacement PDF blob could not be confirmed in database.');
+      }
+      const verifiedBlob = verifyBlobSnap.val() as FileBlobRecord;
+      if (!verifiedBlob || !verifiedBlob.data_base64 || verifiedBlob.data_base64.length < 10) {
+        throw new Error('Verification failed: Replacement PDF blob has empty or corrupted data.');
+      }
+      try {
+        const headerSample = atob(verifiedBlob.data_base64.slice(0, 64));
+        if (!headerSample.startsWith('%PDF-')) {
+          throw new Error('Verification failed: Decoded replacement data does not match PDF signature (%PDF-).');
+        }
+      } catch (decodeErr) {
+        throw new Error(`Verification failed: Decoded replacement data is not valid Base64 PDF: ${decodeErr}`);
+      }
     }
 
     // 4. Atomically update material metadata in /materials, /publicMaterials, and blob published flag
     const now = Date.now();
-    const merged: StudyMaterial = {
+    const merged: Record<string, unknown> = {
       ...currentMaterial,
       ...additionalMetadataUpdates,
       fileName: uploadResult.fileName,
       storagePath: uploadResult.storagePath,
       downloadUrl: uploadResult.downloadUrl,
-      blobId: uploadResult.blobId,
       fileSize: uploadResult.fileSize,
+      storageProvider: uploadResult.storageProvider || 'firebase',
+      r2Key: uploadResult.r2Key,
+      r2Url: uploadResult.r2Url,
       published: isPublished,
       updatedAt: now,
     };
 
+    if (uploadResult.blobId) {
+      merged.blobId = uploadResult.blobId;
+    }
+
+    // Strip undefined keys
+    const cleanData: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(merged)) {
+      if (value !== undefined) {
+        cleanData[key] = value;
+      }
+    }
+
     const updates: Record<string, unknown> = {};
-    updates[`materials/${material.id}`] = merged;
+    updates[`materials/${material.id}`] = cleanData;
     if (isPublished) {
-      updates[`publicMaterials/${material.id}`] = merged;
+      updates[`publicMaterials/${material.id}`] = cleanData;
     } else {
       updates[`publicMaterials/${material.id}`] = null;
     }
-    updates[`file_blobs/${uploadResult.blobId}/published`] = isPublished;
+    if (uploadResult.blobId) {
+      updates[`file_blobs/${uploadResult.blobId}/published`] = isPublished;
+    }
 
     await update(ref(database), updates);
 
-    // 5. Confirm the metadata in RTDB references the new blob
+    // 5. Confirm the metadata in RTDB was updated
     const checkMetaSnap = await get(ref(database, `materials/${material.id}`));
-    if (!checkMetaSnap.exists() || checkMetaSnap.val()?.blobId !== uploadResult.blobId) {
-      throw new Error('Verification failed: Material metadata was not updated with new blob reference.');
-    }
-    if (isPublished) {
-      const checkPubSnap = await get(ref(database, `publicMaterials/${material.id}`));
-      if (!checkPubSnap.exists() || checkPubSnap.val()?.blobId !== uploadResult.blobId) {
-        throw new Error('Verification failed: Public material metadata was not updated with new blob reference.');
-      }
+    if (!checkMetaSnap.exists()) {
+      throw new Error('Verification failed: Material metadata was not found after update.');
     }
 
     // 6. Invalidate caches (sessionStorage and in-memory Blob URL cache)
@@ -1172,9 +1566,22 @@ export async function replaceMaterialPdf(
     if (oldBlobId) {
       revokeBlobUrl(oldBlobId);
     }
-    revokeBlobUrl(uploadResult.blobId);
+    if (oldR2Key) {
+      revokeBlobUrl(oldR2Key);
+    }
+    if (uploadResult.blobId) {
+      revokeBlobUrl(uploadResult.blobId);
+    }
+    if (uploadResult.r2Key) {
+      revokeBlobUrl(uploadResult.r2Key);
+    }
 
-    // 7. Remove old blob only after replacement is confirmed accessible and if not shared
+    // 7. Remove old file only after replacement is confirmed accessible
+    if (oldR2Key && oldR2Key !== uploadResult.r2Key) {
+      await deletePdfFromR2(material.id, oldR2Key).catch((delErr) =>
+        console.warn(`Old R2 object removal notice for ${oldR2Key}:`, delErr)
+      );
+    }
     if (oldBlobId && oldBlobId !== uploadResult.blobId) {
       const isShared = await isBlobReferencedByOthers(oldBlobId, material.id);
       if (!isShared) {
@@ -1188,11 +1595,18 @@ export async function replaceMaterialPdf(
       fileName: uploadResult.fileName,
       downloadUrl: uploadResult.downloadUrl,
       blobId: uploadResult.blobId,
+      storageProvider: uploadResult.storageProvider,
+      r2Key: uploadResult.r2Key,
     };
   } catch (err) {
-    // Rollback: if updating metadata or verification failed, clean up the new uploaded blob to avoid orphans
+    // Rollback: if updating metadata or verification failed, clean up the new uploaded file
     try {
-      await remove(ref(database, `file_blobs/${uploadResult.blobId}`));
+      if (uploadResult.storageProvider === 'r2' && uploadResult.r2Key) {
+        await deletePdfFromR2(material.id, uploadResult.r2Key);
+      }
+      if (uploadResult.blobId) {
+        await remove(ref(database, `file_blobs/${uploadResult.blobId}`));
+      }
     } catch {
       // Ignore rollback cleanup error
     }
@@ -1201,7 +1615,7 @@ export async function replaceMaterialPdf(
 }
 
 /**
- * Delete material: removes database metadata and associated RTDB file blob safely
+ * Delete material: removes database metadata and associated R2 object or RTDB file blob safely
  */
 export async function deleteMaterial(material: StudyMaterial): Promise<void> {
   if (!database) throw new Error('Database not initialized');
@@ -1218,8 +1632,25 @@ export async function deleteMaterial(material: StudyMaterial): Promise<void> {
   if (material.blobId) {
     revokeBlobUrl(material.blobId);
   }
+  if (material.r2Key) {
+    revokeBlobUrl(material.r2Key);
+  }
 
-  // 3. Remove blob from /file_blobs if present and not shared
+  // 3. Delete from Cloudflare R2 if applicable
+  if (isR2Material(material)) {
+    const r2Key =
+      material.r2Key ||
+      (material.storagePath?.startsWith('r2://')
+        ? material.storagePath.replace('r2://', '')
+        : undefined);
+    try {
+      await deletePdfFromR2(material.id, r2Key);
+    } catch (r2DelErr) {
+      console.warn(`R2 deletion notice for ${material.id}:`, r2DelErr);
+    }
+  }
+
+  // 4. Remove blob from /file_blobs if present and not shared
   if (material.blobId) {
     const isShared = await isBlobReferencedByOthers(material.blobId, material.id);
     if (!isShared) {
