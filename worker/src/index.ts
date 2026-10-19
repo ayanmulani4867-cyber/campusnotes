@@ -126,9 +126,10 @@ export default {
 
     const url = new URL(request.url);
     const pathname = url.pathname;
+    const normalizedPath = pathname.replace(/\/+$/, '') || '/';
 
     // 2. Health check route
-    if (pathname === '/' || pathname === '/health') {
+    if (normalizedPath === '/' || normalizedPath === '/health') {
       return jsonResponse(
         {
           status: 'ok',
@@ -144,13 +145,14 @@ export default {
 
     // 3. Decommission temporary test endpoint
     // Per requirements: The current Worker test endpoint is temporary and must not remain publicly accessible.
-    if (pathname === '/test-pdf') {
+    // Unauthenticated requests MUST return HTTP 403 and NEVER expose the test PDF.
+    if (normalizedPath === '/test-pdf') {
       // Allow only if admin authorized
       const auth = await verifyAdminRequest(request, env);
       if (!auth.isAuthorized) {
         return jsonResponse(
           {
-            error: 'The temporary test endpoint has been decommissioned. Please access documents through authorized material routes.',
+            error: 'Forbidden: The temporary test endpoint has been decommissioned. Please access documents through authorized material routes.',
           },
           403,
           corsHeaders
@@ -166,7 +168,8 @@ export default {
       headers.set('Content-Disposition', 'attachment; filename="test-assignment.pdf"');
       headers.set('Content-Length', String(testObj.size));
       headers.set('Cache-Control', 'private, no-store');
-      return new Response(testObj.body, { status: 200, headers });
+      headers.set('X-Content-Type-Options', 'nosniff');
+      return new Response(request.method === 'HEAD' ? null : testObj.body, { status: 200, headers });
     }
 
     // 4. Match /materials/:materialId/pdf route

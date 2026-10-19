@@ -235,6 +235,47 @@ describe('CampusNotes R2 Worker Security & Integrity Tests', () => {
     assert(body.error.includes('decommissioned'));
   });
 
+  it('GET /test-pdf/ with trailing slash without admin auth returns 403', async () => {
+    const mockBucket = new MockR2Bucket();
+    const env = { PDF_BUCKET: mockBucket };
+
+    const req = new Request('https://api.campusnotes.internal/test-pdf/');
+    const res = await worker.fetch(req, env);
+
+    assert.equal(res.status, 403);
+    const body = await res.json();
+    assert(body.error.includes('decommissioned'));
+  });
+
+  it('HEAD /test-pdf without admin auth returns 403', async () => {
+    const mockBucket = new MockR2Bucket();
+    const env = { PDF_BUCKET: mockBucket };
+
+    const req = new Request('https://api.campusnotes.internal/test-pdf', { method: 'HEAD' });
+    const res = await worker.fetch(req, env);
+
+    assert.equal(res.status, 403);
+  });
+
+  it('GET /test-pdf WITH admin auth serves sample test file with private cache', async () => {
+    const mockBucket = new MockR2Bucket();
+    const env = { PDF_BUCKET: mockBucket, FIREBASE_PROJECT_ID: TEST_PROJECT_ID };
+    const validAdminToken = await createTestJwt();
+
+    const sampleBytes = new TextEncoder().encode('%PDF-1.4\nSample Test Document\n%%EOF');
+    await mockBucket.put('test-assignment.pdf', sampleBytes);
+
+    const req = new Request('https://api.campusnotes.internal/test-pdf', {
+      headers: { Authorization: `Bearer ${validAdminToken}` },
+    });
+    const res = await worker.fetch(req, env);
+
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('Content-Type'), 'application/pdf');
+    assert.equal(res.headers.get('Cache-Control'), 'private, no-store');
+    assert.equal(res.headers.get('X-Content-Type-Options'), 'nosniff');
+  });
+
   // -----------------------------------------------------------------
   // 2. Cryptographic JWT Verification Tests (Negative & Positive)
   // -----------------------------------------------------------------
