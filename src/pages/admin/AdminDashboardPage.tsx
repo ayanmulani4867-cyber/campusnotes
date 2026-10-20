@@ -1170,7 +1170,7 @@ export const AdminDashboardPage: React.FC = () => {
                               >
                                 <span
                                   className={`w-1.5 h-1.5 rounded-full ${
-                                    mat.published ? 'bg-slate-600' : 'bg-amber-500'
+                                    mat.published ? 'bg-green-500' : 'bg-amber-500'
                                   }`}
                                 />
                                 <span>{mat.published ? 'Published' : 'Draft'}</span>
@@ -1254,7 +1254,7 @@ export const AdminDashboardPage: React.FC = () => {
                               : 'bg-amber-50 text-amber-800 border border-amber-200'
                           }`}
                         >
-                          <span className={`w-1.5 h-1.5 rounded-full ${mat.published ? 'bg-slate-600' : 'bg-amber-500'}`} />
+                          <span className={`w-1.5 h-1.5 rounded-full ${mat.published ? 'bg-green-500' : 'bg-amber-500'}`} />
                           <span>{mat.published ? 'Published' : 'Draft'}</span>
                         </button>
                       </div>
