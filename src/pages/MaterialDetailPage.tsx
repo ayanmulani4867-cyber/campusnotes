@@ -105,9 +105,13 @@ export const MaterialDetailPage: React.FC = () => {
 
   const handleShare = async () => {
     if (!material) return;
-    const success = await shareMaterial(material, (title, msg) => {
-      toast.success(title, msg);
-    });
+    const success = await shareMaterial(
+      material,
+      (title, msg) => {
+        toast.success(title, msg);
+      },
+      subject || undefined
+    );
     if (success) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
@@ -313,7 +317,7 @@ export const MaterialDetailPage: React.FC = () => {
       {/* Embedded PDF Viewer */}
       <section>
         <h2 className="text-lg font-bold text-slate-900 mb-3">Document Reader</h2>
-        <PdfViewer material={material} />
+        <PdfViewer material={material} subject={subject || undefined} />
       </section>
 
       {/* Related Materials Section */}

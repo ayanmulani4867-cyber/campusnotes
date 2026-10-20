@@ -77,9 +77,13 @@ export const MaterialCard: React.FC<MaterialCardProps> = React.memo(({
 
   const handleShare = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    const success = await shareMaterial(material, (title, msg) => {
-      toast.success(title, msg);
-    });
+    const success = await shareMaterial(
+      material,
+      (title, msg) => {
+        toast.success(title, msg);
+      },
+      subject
+    );
     if (success) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);

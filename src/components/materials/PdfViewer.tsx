@@ -9,7 +9,7 @@ import {
   Check,
   BookOpen,
 } from 'lucide-react';
-import { StudyMaterial } from '../../types';
+import { StudyMaterial, Subject } from '../../types';
 import {
   fetchPdfBlobUrl,
   downloadStudyMaterial,
@@ -23,9 +23,10 @@ import { formatFileSize } from './MaterialCard';
 
 interface PdfViewerProps {
   material: StudyMaterial;
+  subject?: Subject;
 }
 
-export const PdfViewer: React.FC<PdfViewerProps> = ({ material }) => {
+export const PdfViewer: React.FC<PdfViewerProps> = ({ material, subject }) => {
   const toast = useToast();
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -129,9 +130,13 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material }) => {
   };
 
   const handleShare = async () => {
-    const success = await shareMaterial(material, (title, msg) => {
-      toast.success(title, msg);
-    });
+    const success = await shareMaterial(
+      material,
+      (title, msg) => {
+        toast.success(title, msg);
+      },
+      subject
+    );
     if (success) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
