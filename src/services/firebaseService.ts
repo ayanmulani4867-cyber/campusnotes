@@ -533,14 +533,14 @@ export async function getOrFetchPdfBlob(
   // 2. Check in-flight requests (deduplicates concurrent preview + download, repeated clicks)
   const existingPromise = inFlightPdfRequests.get(cleanId);
   if (existingPromise) {
-    onProgress?.('Connecting to active download...');
+    onProgress?.('Preparing download...');
     return await existingPromise;
   }
 
   // 3. Initiate single optimized fetch and register in flight
   const fetchPromise = (async () => {
     try {
-      onProgress?.('Connecting to database...');
+      onProgress?.('Fetching document...');
 
       const blobRecord = await getMaterialPdfBlob(cleanId, onProgress);
       if (!blobRecord || !blobRecord.data_base64) {
@@ -624,14 +624,14 @@ export async function getOrFetchR2PdfBlob(
   // 2. Check in-flight requests (deduplicates concurrent preview + download)
   const existingPromise = inFlightPdfRequests.get(cacheKey);
   if (existingPromise) {
-    onProgress?.('Connecting to active download...');
+    onProgress?.('Preparing download...');
     return await existingPromise;
   }
 
   // 3. Initiate single optimized fetch and register in flight
   const fetchPromise = (async () => {
     try {
-      onProgress?.('Connecting to Cloudflare R2 storage...');
+      onProgress?.('Fetching document...');
       const targetUrl = material.r2Url || getR2PdfUrl(material.id);
 
       const headers: Record<string, string> = {};
@@ -655,39 +655,13 @@ export async function getOrFetchR2PdfBlob(
         throw new Error(`Failed to download PDF document from storage (HTTP ${response.status}).`);
       }
 
-      const contentLength = response.headers.get('content-length');
-      const totalBytes = contentLength ? parseInt(contentLength, 10) : (material.fileSize || 0);
-
-      let blob: Blob;
-
-      if (response.body && totalBytes > 0 && typeof onProgress === 'function') {
-        const reader = response.body.getReader();
-        const chunks: Uint8Array[] = [];
-        let receivedBytes = 0;
-        let lastReportedPercent = -1;
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          if (value) {
-            chunks.push(value);
-            receivedBytes += value.length;
-            const percent = Math.min(99, Math.round((receivedBytes / totalBytes) * 100));
-            if (percent !== lastReportedPercent) {
-              lastReportedPercent = percent;
-              const mbReceived = (receivedBytes / (1024 * 1024)).toFixed(1);
-              const mbTotal = (totalBytes / (1024 * 1024)).toFixed(1);
-              onProgress(`Downloading PDF: ${percent}% (${mbReceived} MB / ${mbTotal} MB)...`);
-            }
-          }
-        }
-
-        blob = new Blob(chunks as BlobPart[], { type: 'application/pdf' });
-      } else {
-        blob = await response.blob();
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/pdf')) {
+        throw new Error('Invalid document format received from storage.');
       }
 
       onProgress?.('Preparing file...');
+      const blob = await response.blob();
       const objectUrl = URL.createObjectURL(blob);
       const safeFilename = material.fileName || `${sanitizeFilename(material.title || 'study_material')}.pdf`;
 
@@ -853,6 +827,29 @@ export async function fetchPdfBlobUrl(
  * 2. Checks if stored in Cloudflare R2 -> streams from R2 Worker directly.
  * 3. Extracts blobId directly from materialInput without extra database roundtrips.
  * 4. Reuses already downloaded blob from session cache (0 ms instant download) or joins in-flight request.
+/**
+ * Programmatically triggers a file download in the browser with maximum cross-browser reliability
+ */
+export function triggerBrowserDownload(url: string, filename: string): void {
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.rel = 'noopener noreferrer';
+  document.body.appendChild(link);
+  link.click();
+  setTimeout(() => {
+    if (link.parentNode) {
+      document.body.removeChild(link);
+    }
+  }, 100);
+}
+
+/**
+ * Safely downloads a study material for public or admin users:
+ * 1. Checks if it's a local demo PDF or external HTTP URL.
+ * 2. Checks if stored in Cloudflare R2 -> streams from R2 Worker directly.
+ * 3. Extracts blobId directly from materialInput without extra database roundtrips.
+ * 4. Reuses already downloaded blob from session cache (0 ms instant download) or joins in-flight request.
  * 5. Triggers programmatic browser download without popup blockers (no target=_blank).
  */
 export async function downloadStudyMaterial(
@@ -860,18 +857,22 @@ export async function downloadStudyMaterial(
   onProgress?: (status: string) => void
 ): Promise<void> {
   try {
+    let safeFilename =
+      materialInput.fileName ||
+      `${sanitizeFilename(materialInput.title || 'study_material')}.pdf`;
+
     // Step 0: Instant session memory cache check (0 ms instant download without network)
     const instantCachedUrl = getCachedPdfUrl(materialInput);
     if (instantCachedUrl) {
-      const safeFilename =
-        materialInput.fileName ||
-        `${sanitizeFilename(materialInput.title || 'study_material')}.pdf`;
       const link = document.createElement('a');
       link.href = instantCachedUrl;
       link.download = safeFilename;
+      link.rel = 'noopener noreferrer';
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
+      setTimeout(() => {
+        if (link.parentNode) document.body.removeChild(link);
+      }, 100);
       healthMonitorService.recordPdfOperation('DOWNLOAD', true, {
         materialId: materialInput.id,
         fileName: safeFilename,
@@ -881,16 +882,10 @@ export async function downloadStudyMaterial(
 
     // Step 1: Handle static demo PDFs (/demo-pdfs/...)
     if (materialInput.downloadUrl && materialInput.downloadUrl.startsWith('/demo-pdfs/')) {
-      const link = document.createElement('a');
-      link.href = materialInput.downloadUrl;
-      const safeDemoName = materialInput.fileName || `${sanitizeFilename(materialInput.title)}.pdf`;
-      link.download = safeDemoName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      triggerBrowserDownload(materialInput.downloadUrl, safeFilename);
       healthMonitorService.recordPdfOperation('DOWNLOAD', true, {
         materialId: materialInput.id,
-        fileName: safeDemoName,
+        fileName: safeFilename,
       });
       return;
     }
@@ -901,16 +896,10 @@ export async function downloadStudyMaterial(
       materialInput.downloadUrl.startsWith('http') &&
       !materialInput.downloadUrl.includes('workers.dev')
     ) {
-      const link = document.createElement('a');
-      link.href = materialInput.downloadUrl;
-      const safeHttpName = materialInput.fileName || `${sanitizeFilename(materialInput.title)}.pdf`;
-      link.download = safeHttpName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      triggerBrowserDownload(materialInput.downloadUrl, safeFilename);
       healthMonitorService.recordPdfOperation('DOWNLOAD', true, {
         materialId: materialInput.id,
-        fileName: safeHttpName,
+        fileName: safeFilename,
       });
       return;
     }
@@ -918,32 +907,26 @@ export async function downloadStudyMaterial(
     // Step 2.5: Handle Cloudflare R2 Storage Provider
     if (isR2Material(materialInput)) {
       try {
-        onProgress?.('Fetching PDF from Cloudflare R2...');
+        onProgress?.('Starting download...');
         const cachedEntry = await getOrFetchR2PdfBlob(materialInput, onProgress);
 
-        onProgress?.('Starting download...');
-        const safeFilename =
+        const r2Filename =
           materialInput.fileName ||
           cachedEntry.fileName ||
-          `${sanitizeFilename(materialInput.title || 'study_material')}.pdf`;
+          safeFilename;
 
-        const link = document.createElement('a');
-        link.href = cachedEntry.objectUrl;
-        link.download = safeFilename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        triggerBrowserDownload(cachedEntry.objectUrl, r2Filename);
 
         healthMonitorService.recordPdfOperation('DOWNLOAD', true, {
           materialId: materialInput.id,
-          fileName: safeFilename,
+          fileName: r2Filename,
         });
         return;
       } catch (r2Err) {
         const fallbackBlobId = extractBlobId(materialInput);
         if (fallbackBlobId) {
           console.warn('R2 download failed, falling back to Firebase RTDB storage:', r2Err);
-          onProgress?.('Cloudflare R2 unavailable, falling back to Firebase storage...');
+          onProgress?.('Falling back to database storage...');
           // Proceed to Step 3 below
         } else {
           throw r2Err;
@@ -1006,17 +989,12 @@ export async function downloadStudyMaterial(
     onProgress?.('Starting download...');
 
     // Step 5: Programmatic browser download
-    const safeFilename =
+    safeFilename =
       freshMaterial.fileName ||
       cachedEntry.fileName ||
       `${sanitizeFilename(freshMaterial.title || 'study_material')}.pdf`;
 
-    const link = document.createElement('a');
-    link.href = cachedEntry.objectUrl;
-    link.download = safeFilename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    triggerBrowserDownload(cachedEntry.objectUrl, safeFilename);
 
     // Record successful download
     healthMonitorService.recordPdfOperation('DOWNLOAD', true, {

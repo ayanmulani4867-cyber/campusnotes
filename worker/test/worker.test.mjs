@@ -656,6 +656,45 @@ describe('CampusNotes R2 Worker Security & Integrity Tests', () => {
     assert(body.error.includes('unavailable, unpublished, or access is restricted'));
   });
 
+  it('Accepts admin authorization token via ?token= query parameter for direct download stream', async () => {
+    const mockBucket = new MockR2Bucket();
+    const env = { PDF_BUCKET: mockBucket, FIREBASE_PROJECT_ID: TEST_PROJECT_ID };
+    const validAdminToken = await createTestJwt();
+
+    const sampleBytes = new TextEncoder().encode('%PDF-1.4\nSample Admin Test Document\n%%EOF');
+    await mockBucket.put('test-assignment.pdf', sampleBytes);
+
+    const req = new Request(`https://api.campusnotes.internal/test-pdf?token=${encodeURIComponent(validAdminToken)}`);
+    const res = await worker.fetch(req, env);
+
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('Content-Type'), 'application/pdf');
+    assert.equal(res.headers.get('Cache-Control'), 'private, no-store');
+  });
+
+  it('GET with ?download=1 returns Content-Disposition attachment with sanitized filename', async () => {
+    const mockBucket = new MockR2Bucket();
+    const env = {
+      PDF_BUCKET: mockBucket,
+      FIREBASE_PROJECT_ID: TEST_PROJECT_ID,
+      FIREBASE_DATABASE_URL: 'https://campusnotes-e62cf-default-rtdb.firebaseio.com',
+    };
+
+    const content = '%PDF-1.4\nDownload Test\n%%EOF';
+    await mockBucket.put('materials/mat_1792315080484_0bfh.pdf', content, {
+      httpMetadata: { contentType: 'application/pdf' },
+    });
+
+    const req = new Request('https://api.campusnotes.internal/materials/mat_1792315080484_0bfh/pdf?download=1');
+    const res = await worker.fetch(req, env);
+
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('Content-Type'), 'application/pdf');
+    const disposition = res.headers.get('Content-Disposition') || '';
+    assert(disposition.startsWith('attachment;'), 'Must send Content-Disposition: attachment for downloads');
+    assert(disposition.includes('.pdf'), 'Must preserve .pdf extension');
+  });
+
   // -----------------------------------------------------------------
   // 7. Migration Publication Partition Isolation & Rollback Safety Tests
   // -----------------------------------------------------------------

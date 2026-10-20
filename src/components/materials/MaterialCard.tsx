@@ -70,7 +70,7 @@ export const MaterialCard: React.FC<MaterialCardProps> = React.memo(({
     try {
       setDownloading(true);
       await downloadStudyMaterial(material);
-      toast.success('Download Complete', `"${material.fileName || material.title}" downloaded.`);
+      toast.success('Download Started', `"${material.fileName || material.title}" download initiated.`);
     } catch (err: unknown) {
       toast.error('Download Failed', err instanceof Error ? err.message : String(err));
     } finally {
@@ -245,7 +245,7 @@ export const MaterialCard: React.FC<MaterialCardProps> = React.memo(({
             ) : (
               <Download className="w-3.5 h-3.5 shrink-0" />
             )}
-            <span className="truncate">{downloading ? 'Saving...' : 'Download'}</span>
+            <span className="truncate">{downloading ? 'Starting...' : 'Download'}</span>
           </button>
 
           <button

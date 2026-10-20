@@ -122,11 +122,11 @@ export const MaterialDetailPage: React.FC = () => {
     if (!material || downloading) return;
     try {
       setDownloading(true);
-      setDownloadProgressText('Connecting...');
+      setDownloadProgressText('Starting download...');
       await downloadStudyMaterial(material, (status) => {
         setDownloadProgressText(status);
       });
-      toast.success('Download Complete', 'PDF document downloaded successfully.');
+      toast.success('Download Started', `"${material.fileName || material.title}" download initiated.`);
     } catch (err: unknown) {
       toast.error('Download Failed', err instanceof Error ? err.message : String(err));
     } finally {
@@ -256,7 +256,7 @@ export const MaterialDetailPage: React.FC = () => {
                 {downloading ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>{downloadProgressText || 'Downloading...'}</span>
+                    <span>{downloadProgressText || 'Starting download...'}</span>
                   </>
                 ) : (
                   <>

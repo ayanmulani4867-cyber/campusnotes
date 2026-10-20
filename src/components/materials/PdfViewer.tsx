@@ -84,7 +84,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material, subject }) => {
     setIsLoading(true);
     setLoadError(false);
     setErrorMessage('');
-    setLoadingProgress('Connecting to database...');
+    setLoadingProgress('Loading document...');
 
     try {
       const url = await fetchPdfBlobUrl(material, (status) => {
@@ -106,7 +106,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material, subject }) => {
     if (downloading) return;
     try {
       setDownloading(true);
-      setDownloadProgressText('Connecting...');
+      setDownloadProgressText('Starting download...');
       await downloadStudyMaterial(material, (status) => {
         setDownloadProgressText(status);
       });
@@ -118,7 +118,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material, subject }) => {
         setIsReaderActive(true);
       }
 
-      toast.success('Download Complete', `"${material.fileName || material.title}" downloaded.`);
+      toast.success('Download Started', `"${material.fileName || material.title}" download initiated.`);
     } catch (err: unknown) {
       toast.error('Download Failed', err instanceof Error ? err.message : String(err));
     } finally {
@@ -227,7 +227,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material, subject }) => {
               <Download className="w-3.5 h-3.5" />
             )}
             <span className="truncate max-w-[130px] sm:max-w-none">
-              {downloadProgressText || (downloading ? 'Downloading...' : 'Download')}
+              {downloadProgressText || (downloading ? 'Starting...' : 'Download')}
             </span>
           </button>
         </div>

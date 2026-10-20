@@ -212,14 +212,24 @@ export async function verifyAdminRequest(
   request: Request,
   env: Env
 ): Promise<AdminAuthResult> {
+  let token = '';
   const authHeader = request.headers.get('Authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return { isAuthorized: false, error: 'Missing or malformed Authorization header' };
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7).trim();
+  } else {
+    try {
+      const url = new URL(request.url);
+      const queryToken = url.searchParams.get('token') || url.searchParams.get('auth');
+      if (queryToken) {
+        token = queryToken.trim();
+      }
+    } catch {
+      // Ignore URL parsing errors
+    }
   }
 
-  const token = authHeader.substring(7).trim();
   if (!token) {
-    return { isAuthorized: false, error: 'Empty bearer token' };
+    return { isAuthorized: false, error: 'Missing or malformed Authorization header' };
   }
 
   const projectId = env.FIREBASE_PROJECT_ID || 'campusnotes-e62cf';

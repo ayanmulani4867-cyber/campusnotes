@@ -202,7 +202,10 @@ export default {
         const auth = await verifyAdminRequest(request, env);
         if (auth.isAuthorized) {
           const authHeader = request.headers.get('Authorization') || '';
-          const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+          let token = authHeader.replace(/^Bearer\s+/i, '').trim();
+          if (!token) {
+            token = url.searchParams.get('token') || url.searchParams.get('auth') || '';
+          }
           material = await getAdminMaterialMetadata(materialId, token, env);
           isDraftView = true;
         }
