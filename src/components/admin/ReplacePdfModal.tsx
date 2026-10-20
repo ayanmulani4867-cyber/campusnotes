@@ -3,7 +3,7 @@ import { Upload, FileText, AlertTriangle, RefreshCw } from 'lucide-react';
 import { StudyMaterial } from '../../types';
 import {
   replaceMaterialPdf,
-  MAX_RTDB_PDF_SIZE_BYTES,
+  MAX_FILE_SIZE_BYTES,
 } from '../../services/firebaseService';
 import { formatFileSize } from '../materials/MaterialCard';
 import { Modal } from '../common/Modal';
@@ -45,10 +45,10 @@ export const ReplacePdfModal: React.FC<ReplacePdfModalProps> = ({
       return;
     }
 
-    if (file.size > MAX_RTDB_PDF_SIZE_BYTES) {
+    if (file.size > MAX_FILE_SIZE_BYTES) {
       toast.error(
         'File Exceeds Limit',
-        `File size (${formatFileSize(file.size)}) exceeds maximum allowed size of 6 MB for Realtime Database storage.`
+        `File size (${formatFileSize(file.size)}) exceeds maximum allowed size of 50 MB.`
       );
       e.target.value = '';
       setSelectedFile(null);
