@@ -958,13 +958,16 @@ export const AdminDashboardPage: React.FC = () => {
                             </td>
                             <td className="py-2.5 px-4">
                               <span
-                                className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${
+                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium ${
                                   mat.published
                                     ? 'bg-slate-100 text-slate-800 border border-slate-200'
                                     : 'bg-amber-50 text-amber-800 border border-amber-200'
                                 }`}
                               >
-                                {mat.published ? 'Published' : 'Draft'}
+                                {mat.published && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                                )}
+                                <span>{mat.published ? 'Published' : 'Draft'}</span>
                               </span>
                             </td>
                             <td className="py-2.5 px-4 text-right">
