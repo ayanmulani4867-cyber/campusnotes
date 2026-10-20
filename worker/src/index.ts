@@ -4,7 +4,7 @@
 
 import type { Env, PublicMaterialRecord } from './types.ts';
 import { verifyAdminRequest } from './auth.ts';
-import { getPublicMaterialMetadata, getAdminMaterialMetadata } from './firebase.ts';
+import { getPublicMaterialMetadata, getAdminMaterialMetadata, invalidatePublicMaterialCache } from './firebase.ts';
 
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://campusnotes-ifpr.onrender.com',
@@ -117,7 +117,7 @@ export function parseByteRange(
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx?: { waitUntil?: (p: Promise<unknown>) => void }): Promise<Response> {
     const corsHeaders = buildCorsHeaders(request, env);
 
     // 1. Handle CORS Preflight
@@ -190,11 +190,36 @@ export default {
     // -------------------------------------------------------------
     // GET / HEAD: Serve PDF for a material (Public or Authorized Admin)
     // -------------------------------------------------------------
+    // -------------------------------------------------------------
+    // GET / HEAD: Serve PDF for a material (Public or Authorized Admin)
+    // -------------------------------------------------------------
     if (request.method === 'GET' || request.method === 'HEAD') {
+      const isDownload = url.searchParams.get('download') === '1';
+      const rangeHeader = request.headers.get('Range');
+      const ifNoneMatch = request.headers.get('If-None-Match');
+      const hasCacheApi = typeof caches !== 'undefined' && Boolean(caches.default);
+
+      // Check Cloudflare Edge Cache for full GET requests (published materials only)
+      if (hasCacheApi && request.method === 'GET' && !rangeHeader) {
+        try {
+          const cacheKey = new Request(url.toString(), { method: 'GET' });
+          const cachedResponse = await caches.default.match(cacheKey);
+          if (cachedResponse) {
+            const cachedEtag = cachedResponse.headers.get('ETag');
+            if (ifNoneMatch && cachedEtag && (ifNoneMatch === cachedEtag || ifNoneMatch === `W/${cachedEtag}`)) {
+              return new Response(null, { status: 304, headers: cachedResponse.headers });
+            }
+            return cachedResponse;
+          }
+        } catch {
+          // Proceed to origin if cache read encounters an error
+        }
+      }
+
       let material: PublicMaterialRecord | null = null;
       let isDraftView = false;
 
-      // Check public partition first
+      // Check public partition first (uses in-memory metadata cache for sub-millisecond retrieval)
       material = await getPublicMaterialMetadata(materialId, env);
 
       // If not in publicMaterials, check if request is by an authorized administrator
@@ -202,10 +227,7 @@ export default {
         const auth = await verifyAdminRequest(request, env);
         if (auth.isAuthorized) {
           const authHeader = request.headers.get('Authorization') || '';
-          let token = authHeader.replace(/^Bearer\s+/i, '').trim();
-          if (!token) {
-            token = url.searchParams.get('token') || url.searchParams.get('auth') || '';
-          }
+          const token = authHeader.replace(/^Bearer\s+/i, '').trim();
           material = await getAdminMaterialMetadata(materialId, token, env);
           isDraftView = true;
         }
@@ -232,9 +254,6 @@ export default {
 
       const rawName = material.fileName || `${material.title || 'study_material'}.pdf`;
       const safeFilename = sanitizeFilename(rawName);
-      const isDownload = url.searchParams.get('download') === '1';
-      const rangeHeader = request.headers.get('Range');
-      const ifNoneMatch = request.headers.get('If-None-Match');
 
       // Optimized Path A: Full GET request without Range header (Stream directly in 1 R2 call)
       if (request.method === 'GET' && !rangeHeader) {
@@ -269,7 +288,20 @@ export default {
           return new Response(null, { status: 304, headers });
         }
 
-        return new Response(fullObj.body, { status: 200, headers });
+        const response = new Response(fullObj.body, { status: 200, headers });
+
+        // Store published immutable PDF in Cloudflare Edge Cache
+        if (hasCacheApi && !isDraftView) {
+          const cacheKey = new Request(url.toString(), { method: 'GET' });
+          const responseToCache = response.clone();
+          if (ctx?.waitUntil) {
+            ctx.waitUntil(caches.default.put(cacheKey, responseToCache));
+          } else {
+            caches.default.put(cacheKey, responseToCache).catch(() => {});
+          }
+        }
+
+        return response;
       }
 
       // Path B: HEAD requests or Range requests
@@ -418,6 +450,21 @@ export default {
         },
       });
 
+      // Invalidate in-memory metadata cache and Cloudflare Edge Cache for this material
+      invalidatePublicMaterialCache(materialId);
+      if (typeof caches !== 'undefined' && Boolean(caches.default)) {
+        try {
+          const origin = url.origin;
+          const cache = caches.default;
+          await Promise.all([
+            cache.delete(new Request(`${origin}/materials/${encodeURIComponent(materialId)}/pdf`, { method: 'GET' })),
+            cache.delete(new Request(`${origin}/materials/${encodeURIComponent(materialId)}/pdf?download=1`, { method: 'GET' })),
+          ]);
+        } catch {
+          // Ignore cache deletion errors
+        }
+      }
+
       return jsonResponse(
         {
           ok: true,
@@ -474,6 +521,21 @@ export default {
       }
 
       await env.PDF_BUCKET.delete(keyToDelete);
+
+      // Invalidate in-memory metadata cache and Cloudflare Edge Cache for this material
+      invalidatePublicMaterialCache(materialId);
+      if (typeof caches !== 'undefined' && Boolean(caches.default)) {
+        try {
+          const origin = url.origin;
+          const cache = caches.default;
+          await Promise.all([
+            cache.delete(new Request(`${origin}/materials/${encodeURIComponent(materialId)}/pdf`, { method: 'GET' })),
+            cache.delete(new Request(`${origin}/materials/${encodeURIComponent(materialId)}/pdf?download=1`, { method: 'GET' })),
+          ]);
+        } catch {
+          // Ignore cache deletion errors
+        }
+      }
 
       return jsonResponse(
         {

@@ -907,7 +907,26 @@ export async function downloadStudyMaterial(
     // Step 2.5: Handle Cloudflare R2 Storage Provider
     if (isR2Material(materialInput)) {
       try {
-        onProgress?.('Starting download...');
+        const isPublished = materialInput.published !== false;
+
+        // Optimized Direct Path: For published materials, stream directly from the edge Worker
+        // to native browser disk. This eliminates multi-MB JS memory buffering (response.blob()),
+        // avoids duplicate memory copies, and initiates browser download immediately at TTFB.
+        if (isPublished) {
+          onProgress?.('Starting download...');
+          const downloadUrl = getR2PdfUrl(materialInput.id, { download: true });
+          triggerBrowserDownload(downloadUrl, safeFilename);
+
+          healthMonitorService.recordPdfOperation('DOWNLOAD', true, {
+            materialId: materialInput.id,
+            fileName: safeFilename,
+          });
+          return;
+        }
+
+        // For unpublished draft materials (admin only), fetch with Authorization Bearer header
+        // and trigger download safely from the cached Blob URL without exposing tokens in URLs.
+        onProgress?.('Preparing draft document...');
         const cachedEntry = await getOrFetchR2PdfBlob(materialInput, onProgress);
 
         const r2Filename =

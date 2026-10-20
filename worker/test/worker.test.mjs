@@ -656,7 +656,7 @@ describe('CampusNotes R2 Worker Security & Integrity Tests', () => {
     assert(body.error.includes('unavailable, unpublished, or access is restricted'));
   });
 
-  it('Accepts admin authorization token via ?token= query parameter for direct download stream', async () => {
+  it('Rejects admin authorization token in ?token= URL query parameter to prevent token exposure', async () => {
     const mockBucket = new MockR2Bucket();
     const env = { PDF_BUCKET: mockBucket, FIREBASE_PROJECT_ID: TEST_PROJECT_ID };
     const validAdminToken = await createTestJwt();
@@ -664,12 +664,21 @@ describe('CampusNotes R2 Worker Security & Integrity Tests', () => {
     const sampleBytes = new TextEncoder().encode('%PDF-1.4\nSample Admin Test Document\n%%EOF');
     await mockBucket.put('test-assignment.pdf', sampleBytes);
 
-    const req = new Request(`https://api.campusnotes.internal/test-pdf?token=${encodeURIComponent(validAdminToken)}`);
-    const res = await worker.fetch(req, env);
+    // Insecure query parameter must be rejected
+    const reqWithQuery = new Request(`https://api.campusnotes.internal/test-pdf?token=${encodeURIComponent(validAdminToken)}`);
+    const resQuery = await worker.fetch(reqWithQuery, env);
+    assert.equal(resQuery.status, 403);
 
-    assert.equal(res.status, 200);
-    assert.equal(res.headers.get('Content-Type'), 'application/pdf');
-    assert.equal(res.headers.get('Cache-Control'), 'private, no-store');
+    // Privileged request must use Authorization: Bearer header
+    const reqWithHeader = new Request('https://api.campusnotes.internal/test-pdf', {
+      headers: {
+        Authorization: `Bearer ${validAdminToken}`,
+      },
+    });
+    const resHeader = await worker.fetch(reqWithHeader, env);
+    assert.equal(resHeader.status, 200);
+    assert.equal(resHeader.headers.get('Content-Type'), 'application/pdf');
+    assert.equal(resHeader.headers.get('Cache-Control'), 'private, no-store');
   });
 
   it('GET with ?download=1 returns Content-Disposition attachment with sanitized filename', async () => {
@@ -747,4 +756,70 @@ describe('CampusNotes R2 Worker Security & Integrity Tests', () => {
     assert.equal(rollbackUpdates.storagePath, 'rtdb://file_blobs/blob_uuid_123');
     assert(rollbackUpdates.downloadUrl.includes('blob_uuid_123'));
   });
+
+  // -----------------------------------------------------------------
+  // 8. Cloudflare Edge Cache API & ETag 304 Conditional Request Tests
+  // -----------------------------------------------------------------
+  it('Serves 304 Not Modified on edge cache hit when If-None-Match matches ETag', async () => {
+    class MockCache {
+      constructor() {
+        this.store = new Map();
+      }
+      async match(req) {
+        const entry = this.store.get(req.url);
+        return entry ? entry.clone() : undefined;
+      }
+      async put(req, res) {
+        this.store.set(req.url, res.clone());
+      }
+      async delete(req) {
+        return this.store.delete(req.url);
+      }
+    }
+
+    const mockCache = new MockCache();
+    const oldCaches = globalThis.caches;
+    globalThis.caches = { default: mockCache };
+
+    try {
+      const mockBucket = new MockR2Bucket();
+      const env = {
+        PDF_BUCKET: mockBucket,
+        FIREBASE_PROJECT_ID: TEST_PROJECT_ID,
+        FIREBASE_DATABASE_URL: 'https://campusnotes-e62cf-default-rtdb.firebaseio.com',
+      };
+
+      // Pre-seed mock cache with an edge response
+      const targetUrl = 'https://api.campusnotes.internal/materials/mat_1792315080484_0bfh/pdf';
+      const cachedHeaders = new Headers({
+        'Content-Type': 'application/pdf',
+        'ETag': '"test-etag-edge-123"',
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      });
+      const cachedRes = new Response(new TextEncoder().encode('%PDF-1.4\nEdge Cache\n%%EOF'), {
+        status: 200,
+        headers: cachedHeaders,
+      });
+      await mockCache.put(new Request(targetUrl), cachedRes);
+
+      // Request with matching If-None-Match
+      const condReq = new Request(targetUrl, {
+        headers: { 'If-None-Match': '"test-etag-edge-123"' },
+      });
+      const condRes = await worker.fetch(condReq, env);
+
+      assert.equal(condRes.status, 304);
+      assert.equal(condRes.headers.get('ETag'), '"test-etag-edge-123"');
+
+      // Request without matching ETag returns full 200 from edge cache
+      const fullReq = new Request(targetUrl);
+      const fullRes = await worker.fetch(fullReq, env);
+      assert.equal(fullRes.status, 200);
+      const body = await fullRes.text();
+      assert(body.includes('Edge Cache'));
+    } finally {
+      globalThis.caches = oldCaches;
+    }
+  });
 });
+
