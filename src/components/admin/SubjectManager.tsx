@@ -327,7 +327,7 @@ export const SubjectManager: React.FC<SubjectManagerProps> = ({
                       >
                         <span
                           className={`w-1.5 h-1.5 rounded-full ${
-                            sub.active ? 'bg-slate-600' : 'bg-amber-500'
+                            sub.active ? 'bg-green-500' : 'bg-amber-500'
                           }`}
                         ></span>
                         <span>{sub.active ? 'Active' : 'Hidden'}</span>
