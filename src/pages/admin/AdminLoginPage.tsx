@@ -5,23 +5,17 @@ import {
   Lock,
   User as UserIcon,
   AlertCircle,
-  HelpCircle,
-  ChevronDown,
-  ChevronUp,
   ArrowRight,
-  Sparkles,
-  Key,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { isFirebaseConfigured, DEFAULT_DATABASE_URL } from '../../config/firebase';
+import { isFirebaseConfigured } from '../../config/firebase';
 
 export const AdminLoginPage: React.FC = () => {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [showSetupGuide, setShowSetupGuide] = useState(false);
 
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -72,11 +66,6 @@ export const AdminLoginPage: React.FC = () => {
     }
   };
 
-  const handleFillDevCredentials = () => {
-    setIdentifier('admin');
-    setPassword('admin');
-  };
-
   return (
     <div className="min-h-[80vh] flex flex-col items-center justify-center px-4 py-6 sm:py-12">
       <div className="w-full max-w-md space-y-5 sm:space-y-6">
@@ -93,35 +82,15 @@ export const AdminLoginPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Development Setup Callout */}
-        <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div className="flex items-start sm:items-center gap-2">
-            <Key className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5 sm:mt-0" />
-            <div>
-              <p className="font-semibold text-slate-800">Initial Setup Credentials</p>
-              <p className="text-[11px] text-slate-500">
-                User: <code className="bg-slate-200/70 px-1 py-0.5 rounded font-mono font-medium">admin</code> &bull; Password: <code className="bg-slate-200/70 px-1 py-0.5 rounded font-mono font-medium">admin</code>
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleFillDevCredentials}
-            className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 active:text-blue-900 underline whitespace-nowrap self-start sm:self-auto min-h-[32px] inline-flex items-center"
-          >
-            Use Setup Credentials
-          </button>
-        </div>
-
         {/* Warning if Firebase not configured */}
         {!isFirebaseConfigured && (
           <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-xs space-y-1">
             <div className="flex items-center gap-1.5 font-bold">
               <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>Firebase Notice</span>
+              <span>Configuration Notice</span>
             </div>
             <p className="text-amber-800 leading-relaxed break-words">
-              Firebase configuration pending in <code>.env</code>. Local development credentials (<code className="font-mono font-semibold">admin/admin</code>) are active.
+              Firebase configuration pending in <code>.env</code>. Connect your Firebase project to enable cloud database operations.
             </p>
           </div>
         )}
@@ -152,7 +121,7 @@ export const AdminLoginPage: React.FC = () => {
                 />
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
-                Enter <strong className="text-slate-600 font-mono">admin</strong> or your registered email address.
+                Enter your administrator ID, username, or registered email.
               </p>
             </div>
 
@@ -167,7 +136,7 @@ export const AdminLoginPage: React.FC = () => {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="admin"
+                  placeholder="••••••••"
                   className="w-full min-h-[44px] pl-10 pr-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
                 />
               </div>
@@ -189,55 +158,13 @@ export const AdminLoginPage: React.FC = () => {
             </button>
           </form>
 
-          <div className="mt-6 pt-4 border-t border-slate-100 text-center">
-            <p className="text-[11px] text-slate-400">
-              Ordinary public users cannot access administrative operations.
-            </p>
+          <div className="mt-6 pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-400 text-center sm:text-left">
+            <span>Ordinary public users cannot access administrative operations.</span>
+            <span className="hidden sm:inline">Protected Area</span>
           </div>
         </div>
 
-        {/* First-time Admin Provisioning Documentation Accordion */}
-        <div className="bg-slate-50 border border-slate-200 rounded-lg overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setShowSetupGuide(!showSetupGuide)}
-            className="w-full min-h-[44px] px-4 sm:px-5 py-3 flex items-center justify-between text-left text-xs font-medium text-slate-700 hover:bg-slate-100 transition-colors"
-          >
-            <span className="flex items-center gap-2">
-              <HelpCircle className="w-4 h-4 text-blue-600 shrink-0" />
-              <span>Production Admin Provisioning Guide</span>
-            </span>
-            {showSetupGuide ? (
-              <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" />
-            ) : (
-              <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
-            )}
-          </button>
-
-          {showSetupGuide && (
-            <div className="px-4 sm:px-5 pb-5 pt-1 text-xs text-slate-600 space-y-3 border-t border-slate-200/80 animate-in fade-in">
-              <p className="leading-relaxed">
-                For production deployment, provision a dedicated administrator through Firebase Authentication:
-              </p>
-              <ol className="list-decimal list-inside space-y-1.5 pl-1 text-[11px] text-slate-700 break-words">
-                <li>
-                  Run the provisioning helper: <code>node scripts/init-admin.mjs</code>.
-                </li>
-                <li>
-                  Or open <strong>Firebase Console &rarr; Authentication &rarr; Users</strong> and add user:
-                  <div className="mt-1 font-mono text-[10px] text-blue-700 break-all">admin@campusnotes.internal</div>
-                </li>
-                <li>
-                  Copy the generated <strong>User UID</strong>.
-                </li>
-                <li>
-                  In Realtime Database (<code>{DEFAULT_DATABASE_URL}</code>), register:
-                  <div className="mt-1 font-mono text-[10px] text-emerald-700 break-all">admins/&lt;UID&gt;: true</div>
-                </li>
-              </ol>
-            </div>
-          )}
-        </div>
+        {/* Footer Credit: Developed and Managed by Ayan Mulani */}
       </div>
     </div>
   );

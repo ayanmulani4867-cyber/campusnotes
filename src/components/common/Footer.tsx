@@ -1,9 +1,25 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { GraduationCap } from 'lucide-react';
 import { CATEGORIES } from '../../types';
 
 export const Footer: React.FC = () => {
+  const location = useLocation();
+  const isAdminLogin = location.pathname === '/admin/login';
+
+  if (isAdminLogin) {
+    return (
+      <footer className="bg-slate-50 text-slate-600 border-t border-slate-200 py-6 mt-auto">
+        <div className="max-w-md mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500 text-center sm:text-left">
+          <p>&copy; {new Date().getFullYear()} CampusNotes</p>
+          <p className="font-medium text-slate-600">
+            Developed and Managed by Ayan Mulani
+          </p>
+        </div>
+      </footer>
+    );
+  }
+
   return (
     <footer className="bg-slate-50 text-slate-600 border-t border-slate-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -71,11 +87,10 @@ export const Footer: React.FC = () => {
             &copy; {new Date().getFullYear()} CampusNotes
           </p>
           <p className="font-medium text-slate-600">
-            Developed & Managed by Ayan
+            Developed and Managed by Ayan Mulani
           </p>
         </div>
       </div>
     </footer>
   );
 };
-
