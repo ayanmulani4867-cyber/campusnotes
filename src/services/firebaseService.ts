@@ -78,19 +78,59 @@ const inFlightPdfRequests = new Map<string, Promise<CachedPdfBlob>>();
 
 /**
  * Checks whether a PDF blob is already cached in memory for the current session.
+ * Supports blobId, r2Key, or material ID.
  */
-export function isPdfCached(blobId?: string | null): boolean {
-  if (!blobId) return false;
-  return pdfBlobSessionCache.has(blobId.trim());
+export function isPdfCached(key?: string | null): boolean {
+  if (!key) return false;
+  const trimmed = key.trim();
+  return (
+    pdfBlobSessionCache.has(trimmed) ||
+    pdfBlobSessionCache.has(`r2_${trimmed}`)
+  );
 }
 
 /**
- * Returns the cached object URL for a blob if present in the current session.
+ * Returns the cached object URL for a blob or r2Key if present in the current session.
  */
-export function getCachedBlobUrl(blobId?: string | null): string | null {
-  if (!blobId) return null;
-  const cached = pdfBlobSessionCache.get(blobId.trim());
+export function getCachedBlobUrl(key?: string | null): string | null {
+  if (!key) return null;
+  const trimmed = key.trim();
+  const cached = pdfBlobSessionCache.get(trimmed) || pdfBlobSessionCache.get(`r2_${trimmed}`);
   return cached ? cached.objectUrl : null;
+}
+
+/**
+ * Comprehensive check whether any material (R2, Firebase RTDB blob, or local demo) is cached in session memory.
+ */
+export function isMaterialPdfCached(material?: StudyMaterial | null): boolean {
+  if (!material) return false;
+  if (material.downloadUrl && material.downloadUrl.startsWith('/demo-pdfs/')) {
+    return true;
+  }
+  const r2Key = material.r2Key || (isR2Material(material) ? `r2_${material.id}` : null);
+  if (r2Key && pdfBlobSessionCache.has(r2Key)) return true;
+  const blobId = extractBlobId(material);
+  if (blobId && pdfBlobSessionCache.has(blobId)) return true;
+  return false;
+}
+
+/**
+ * Retrieves the instant object URL or direct path for a cached study material.
+ */
+export function getCachedPdfUrl(material?: StudyMaterial | null): string | null {
+  if (!material) return null;
+  if (material.downloadUrl && material.downloadUrl.startsWith('/demo-pdfs/')) {
+    return material.downloadUrl;
+  }
+  const r2Key = material.r2Key || (isR2Material(material) ? `r2_${material.id}` : null);
+  if (r2Key && pdfBlobSessionCache.has(r2Key)) {
+    return pdfBlobSessionCache.get(r2Key)!.objectUrl;
+  }
+  const blobId = extractBlobId(material);
+  if (blobId && pdfBlobSessionCache.has(blobId)) {
+    return pdfBlobSessionCache.get(blobId)!.objectUrl;
+  }
+  return null;
 }
 
 /**
@@ -719,6 +759,12 @@ export async function fetchPdfBlobUrl(
   material: StudyMaterial,
   onProgress?: (status: string) => void
 ): Promise<string> {
+  // 0. Instant session memory cache check (0 ms, 0 network)
+  const instantCachedUrl = getCachedPdfUrl(material);
+  if (instantCachedUrl) {
+    return instantCachedUrl;
+  }
+
   // 1. Direct path for local demo PDFs
   if (material.downloadUrl && material.downloadUrl.startsWith('/demo-pdfs/')) {
     return material.downloadUrl;
@@ -814,6 +860,25 @@ export async function downloadStudyMaterial(
   onProgress?: (status: string) => void
 ): Promise<void> {
   try {
+    // Step 0: Instant session memory cache check (0 ms instant download without network)
+    const instantCachedUrl = getCachedPdfUrl(materialInput);
+    if (instantCachedUrl) {
+      const safeFilename =
+        materialInput.fileName ||
+        `${sanitizeFilename(materialInput.title || 'study_material')}.pdf`;
+      const link = document.createElement('a');
+      link.href = instantCachedUrl;
+      link.download = safeFilename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      healthMonitorService.recordPdfOperation('DOWNLOAD', true, {
+        materialId: materialInput.id,
+        fileName: safeFilename,
+      });
+      return;
+    }
+
     // Step 1: Handle static demo PDFs (/demo-pdfs/...)
     if (materialInput.downloadUrl && materialInput.downloadUrl.startsWith('/demo-pdfs/')) {
       const link = document.createElement('a');

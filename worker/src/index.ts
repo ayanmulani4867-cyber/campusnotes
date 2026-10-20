@@ -45,7 +45,8 @@ function jsonResponse(data: unknown, status = 200, corsHeaders?: Headers): Respo
 }
 
 function sanitizeFilename(name: string): string {
-  return name.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_');
+  const clean = name.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_');
+  return clean.toLowerCase().endsWith('.pdf') ? clean : `${clean}.pdf`;
 }
 
 export interface ParsedByteRange {
@@ -226,53 +227,85 @@ export default {
           ? material.storagePath.replace('r2://', '')
           : `materials/${materialId}.pdf`);
 
-      // Retrieve object metadata via head (or get fallback)
-      let headObj = typeof env.PDF_BUCKET.head === 'function' ? await env.PDF_BUCKET.head(r2Key) : null;
-      if (!headObj) {
+      const rawName = material.fileName || `${material.title || 'study_material'}.pdf`;
+      const safeFilename = sanitizeFilename(rawName);
+      const isDownload = url.searchParams.get('download') === '1';
+      const rangeHeader = request.headers.get('Range');
+      const ifNoneMatch = request.headers.get('If-None-Match');
+
+      // Optimized Path A: Full GET request without Range header (Stream directly in 1 R2 call)
+      if (request.method === 'GET' && !rangeHeader) {
         const fullObj = await env.PDF_BUCKET.get(r2Key);
         if (!fullObj) {
-          // Security: do not expose internal storage keys in error responses
           return jsonResponse(
-            {
-              error: `PDF document not found in storage bucket for material: ${materialId}`,
-            },
+            { error: `PDF document not found in storage bucket for material: ${materialId}` },
             404,
             corsHeaders
           );
         }
-        headObj = fullObj;
+
+        const headers = new Headers(corsHeaders);
+        fullObj.writeHttpMetadata(headers);
+        headers.set('Content-Type', 'application/pdf');
+        headers.set(
+          'Content-Disposition',
+          `${isDownload ? 'attachment' : 'inline'}; filename="${safeFilename}"; filename*=UTF-8''${encodeURIComponent(safeFilename)}`
+        );
+        headers.set('ETag', fullObj.httpEtag);
+        headers.set('Accept-Ranges', 'bytes');
+        headers.set('Content-Length', String(fullObj.size));
+
+        if (isDraftView) {
+          headers.set('Cache-Control', 'private, no-store');
+        } else {
+          headers.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+        }
+
+        // 304 Not Modified check
+        if (ifNoneMatch && (ifNoneMatch === fullObj.httpEtag || ifNoneMatch === `W/${fullObj.httpEtag}`)) {
+          return new Response(null, { status: 304, headers });
+        }
+
+        return new Response(fullObj.body, { status: 200, headers });
+      }
+
+      // Path B: HEAD requests or Range requests
+      let headObj = typeof env.PDF_BUCKET.head === 'function' ? await env.PDF_BUCKET.head(r2Key) : null;
+      if (!headObj) {
+        const fallbackObj = await env.PDF_BUCKET.get(r2Key);
+        if (!fallbackObj) {
+          return jsonResponse(
+            { error: `PDF document not found in storage bucket for material: ${materialId}` },
+            404,
+            corsHeaders
+          );
+        }
+        headObj = fallbackObj;
       }
 
       const totalSize = headObj.size;
       const headers = new Headers(corsHeaders);
       headObj.writeHttpMetadata(headers);
       headers.set('Content-Type', 'application/pdf');
-
-      const isDownload = url.searchParams.get('download') === '1';
-      const safeFilename = sanitizeFilename(material.fileName || `${material.title || 'study_material'}.pdf`);
       headers.set(
         'Content-Disposition',
-        `${isDownload ? 'attachment' : 'inline'}; filename="${safeFilename}"`
+        `${isDownload ? 'attachment' : 'inline'}; filename="${safeFilename}"; filename*=UTF-8''${encodeURIComponent(safeFilename)}`
       );
-
       headers.set('ETag', headObj.httpEtag);
       headers.set('Accept-Ranges', 'bytes');
 
       if (isDraftView) {
         headers.set('Cache-Control', 'private, no-store');
       } else {
-        // Safe edge caching for published academic documents
-        headers.set('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
+        headers.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
       }
 
       // 304 Not Modified check
-      const ifNoneMatch = request.headers.get('If-None-Match');
       if (ifNoneMatch && (ifNoneMatch === headObj.httpEtag || ifNoneMatch === `W/${headObj.httpEtag}`)) {
         return new Response(null, { status: 304, headers });
       }
 
       // Range handling per RFC 7233 / RFC 9110
-      const rangeHeader = request.headers.get('Range');
       if (rangeHeader) {
         const parsed = parseByteRange(rangeHeader, totalSize);
         if (parsed === 'unsatisfiable' || parsed === 'invalid') {

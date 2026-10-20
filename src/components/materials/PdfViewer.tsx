@@ -16,6 +16,8 @@ import {
   extractBlobId,
   isPdfCached,
   getCachedBlobUrl,
+  isMaterialPdfCached,
+  getCachedPdfUrl,
 } from '../../services/firebaseService';
 import { shareMaterial } from '../../utils/shareUtils';
 import { useToast } from '../../context/ToastContext';
@@ -54,15 +56,13 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material, subject }) => {
       return;
     }
 
-    // 2. Already in session memory cache -> Instant display without network
-    if (blobId && isPdfCached(blobId)) {
-      const cachedUrl = getCachedBlobUrl(blobId);
-      if (cachedUrl) {
-        setResolvedUrl(cachedUrl);
-        setIsReaderActive(true);
-        setIsLoading(false);
-        return;
-      }
+    // 2. Already in session memory cache (R2, RTDB, or preloaded) -> Instant display without network
+    const cachedUrl = getCachedPdfUrl(material);
+    if (cachedUrl) {
+      setResolvedUrl(cachedUrl);
+      setIsReaderActive(true);
+      setIsLoading(false);
+      return;
     }
 
     // 3. Not yet downloaded -> Keep reader on-demand to save bandwidth
@@ -75,7 +75,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material, subject }) => {
     return () => {
       isMounted = false;
     };
-  }, [material.id, material.downloadUrl, material.blobId, blobId]);
+  }, [material.id, material.downloadUrl, material.blobId, material.r2Key, blobId]);
 
   // Load document reader on explicit user demand
   const handleLoadReader = async () => {
@@ -112,12 +112,10 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material, subject }) => {
       });
 
       // Automatically activate reader using the newly downloaded cached blob
-      if (blobId && isPdfCached(blobId)) {
-        const cachedUrl = getCachedBlobUrl(blobId);
-        if (cachedUrl) {
-          setResolvedUrl(cachedUrl);
-          setIsReaderActive(true);
-        }
+      const newlyCachedUrl = getCachedPdfUrl(material);
+      if (newlyCachedUrl) {
+        setResolvedUrl(newlyCachedUrl);
+        setIsReaderActive(true);
       }
 
       toast.success('Download Complete', `"${material.fileName || material.title}" downloaded.`);

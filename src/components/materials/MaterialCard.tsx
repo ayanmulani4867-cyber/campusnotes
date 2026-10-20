@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   FileText,
   Download,
@@ -51,8 +51,11 @@ export const MaterialCard: React.FC<MaterialCardProps> = React.memo(({
   subject,
 }) => {
   const toast = useToast();
+  const navigate = useNavigate();
   const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  const materialUrl = `/materials/${material.id}`;
 
   const categoryMeta = CATEGORIES.find((c) => c.id === material.category) || {
     id: material.category,
@@ -90,8 +93,37 @@ export const MaterialCard: React.FC<MaterialCardProps> = React.memo(({
     }
   };
 
+  const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // If click was inside any interactive element (button, link, input), let it handle its own event
+    const target = e.target as HTMLElement;
+    if (target.closest('button, a, input, select, textarea')) {
+      return;
+    }
+    // Support Cmd/Ctrl/Shift + Click to open in new tab
+    if (e.metaKey || e.ctrlKey || e.shiftKey) {
+      window.open(materialUrl, '_blank');
+      return;
+    }
+    navigate(materialUrl);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    // Trigger on Enter or Space when the card itself is focused
+    if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      navigate(materialUrl);
+    }
+  };
+
   return (
-    <div className="group bg-white rounded-xl sm:rounded-2xl border border-slate-200/90 p-4 sm:p-5 hover:border-slate-300 hover:shadow-md transition-all flex flex-col justify-between active:scale-[0.99] touch-manipulation shadow-sm w-full max-w-full min-w-0 box-border">
+    <div
+      role="article"
+      tabIndex={0}
+      onClick={handleCardClick}
+      onKeyDown={handleKeyDown}
+      aria-label={`${material.title} (${categoryMeta.name})`}
+      className="group relative bg-white rounded-xl sm:rounded-2xl border border-slate-200/90 p-4 sm:p-5 hover:border-slate-300 hover:shadow-md transition-all flex flex-col justify-between active:scale-[0.99] touch-manipulation shadow-sm w-full max-w-full min-w-0 box-border cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+    >
       <div className="min-w-0 w-full">
         {/* Badges Bar: Category & Academic Year */}
         <div className="flex items-center justify-between gap-2 mb-3 min-w-0">
@@ -105,24 +137,24 @@ export const MaterialCard: React.FC<MaterialCardProps> = React.memo(({
           </span>
         </div>
 
-        {/* Title */}
+        {/* Title with full-card stretched link overlay */}
         <Link
-          to={`/materials/${material.id}`}
-          className="block group-hover:text-blue-600 transition-colors min-w-0"
+          to={materialUrl}
+          className="block group-hover:text-blue-600 transition-colors min-w-0 after:absolute after:inset-0 after:rounded-xl sm:after:rounded-2xl after:content-[''] after:z-0"
         >
           <h3 className="text-base font-semibold text-slate-900 line-clamp-2 leading-snug break-words">
             {material.title}
           </h3>
         </Link>
 
-        {/* Subject Name / Code */}
+        {/* Subject Name / Code (z-10 to stay clickable independently) */}
         <div className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-600 font-medium min-w-0">
           <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0"></span>
           {subject ? (
             <Link
               to={`/subjects/${subject.id}`}
               onClick={(e) => e.stopPropagation()}
-              className="truncate min-w-0 hover:text-blue-600 transition-colors"
+              className="relative z-10 truncate min-w-0 hover:text-blue-600 transition-colors"
             >
               {subject.code} — {subject.name}
             </Link>
@@ -189,10 +221,11 @@ export const MaterialCard: React.FC<MaterialCardProps> = React.memo(({
           </span>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 w-full">
+        {/* Action Buttons (relative z-10 so clicks don't collide with card link) */}
+        <div className="relative z-10 flex items-center gap-1.5 sm:gap-2 min-w-0 w-full">
           <Link
-            to={`/materials/${material.id}`}
+            to={materialUrl}
+            onClick={(e) => e.stopPropagation()}
             aria-label={`View PDF for ${material.title}`}
             className="flex-1 min-w-0 min-h-[42px] inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 active:bg-slate-100 rounded-lg transition-colors box-border"
           >
