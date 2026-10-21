@@ -68,8 +68,6 @@ const Compass = /* @__PURE__ */ createLucideIcon('compass', [["circle",{"cx":"12
 const Database = /* @__PURE__ */ createLucideIcon('database', [["ellipse",{"cx":"12","cy":"5","rx":"9","ry":"3","key":"msslwz"}],["path",{"d":"M3 5V19A9 3 0 0 0 21 19V5","key":"1wlel7"}],["path",{"d":"M3 12A9 3 0 0 0 21 12","key":"mv7ke4"}]]);
 const Download = /* @__PURE__ */ createLucideIcon('download', [["path",{"d":"M12 15V3","key":"m9g1x1"}],["path",{"d":"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4","key":"ih7n3h"}],["path",{"d":"m7 10 5 5 5-5","key":"brsn70"}]]);
 const CloudDownload = /* @__PURE__ */ createLucideIcon('cloud-download', [["path",{"d":"M12 13v8l-4-4","key":"1f5nwf"}],["path",{"d":"m12 21 4-4","key":"1lfcce"}],["path",{"d":"M4.393 15.269A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.436 8.284","key":"ui1hmy"}]]);
-const Copy = /* @__PURE__ */ createLucideIcon('copy', [["rect",{"width":"14","height":"14","x":"8","y":"8","rx":"2","ry":"2","key":"1dvd2w"}],["path",{"d":"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2","key":"zix9uf"}]]);
-const MessageCircle = /* @__PURE__ */ createLucideIcon('message-circle', [["path",{"d":"M7.9 20A9 9 0 1 0 4 16.1L2 22Z","key":"vvpt2q"}]]);
 const Pen = /* @__PURE__ */ createLucideIcon('pen', [["path",{"d":"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z","key":"1a8usu"}]]);
 const ExternalLink = /* @__PURE__ */ createLucideIcon('external-link', [["path",{"d":"M15 3h6v6","key":"1q9fwt"}],["path",{"d":"M10 14 21 3","key":"gplh6r"}],["path",{"d":"M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6","key":"a6xqqp"}]]);
 const Eye = /* @__PURE__ */ createLucideIcon('eye', [["path",{"d":"M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0","key":"1nclc0"}],["circle",{"cx":"12","cy":"12","r":"3","key":"1v7zrd"}]]);
@@ -137,7 +135,6 @@ export {
   Database,
   Download,
   CloudDownload as DownloadCloud,
-  Copy,
   Pen as Edit2,
   ExternalLink,
   Eye,
@@ -163,7 +160,6 @@ export {
   Lock,
   LogOut,
   Menu,
-  MessageCircle,
   Plus,
   RefreshCw,
   RotateCcw,

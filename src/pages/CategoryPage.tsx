@@ -15,7 +15,6 @@ import { OFFICIAL_CSE_SEM_5_SUBJECTS } from '../constants/subjects';
 import { MaterialCard } from '../components/materials/MaterialCard';
 import { MaterialCardSkeleton } from '../components/common/Skeleton';
 import { EmptyState } from '../components/common/EmptyState';
-import { ShareAssignmentCard } from '../components/materials/ShareAssignmentCard';
 import { sortStudyMaterialsAscending } from '../utils/materialSorting';
 import { cacheService } from '../services/cacheService';
 
@@ -160,13 +159,6 @@ export const CategoryPage: React.FC = () => {
             {currentCategory.description}
           </p>
         </div>
-
-        {/* Dedicated WhatsApp Share Assignment Tool for Assignments Category */}
-        {categorySlug === 'assignments' && (
-          <div className="mt-5">
-            <ShareAssignmentCard />
-          </div>
-        )}
       </div>
 
       {/* Filter Row: Subject Dropdown + Search */}

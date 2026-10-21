@@ -31,9 +31,6 @@ const CategoryPage = lazy(() =>
 const AboutPage = lazy(() =>
   import('./pages/AboutPage').then((m) => ({ default: m.AboutPage }))
 );
-const ShareAssignmentPage = lazy(() =>
-  import('./pages/ShareAssignmentPage').then((m) => ({ default: m.ShareAssignmentPage }))
-);
 const NotFoundPage = lazy(() =>
   import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage }))
 );
@@ -75,7 +72,6 @@ const AppContent: React.FC = () => {
             <Route path="/subjects" element={<SubjectsPage />} />
             <Route path="/subjects/:subjectId" element={<SubjectDetailPage />} />
             <Route path="/category/:categorySlug" element={<CategoryPage />} />
-            <Route path="/share-assignment" element={<ShareAssignmentPage />} />
             <Route path="/about" element={<AboutPage />} />
 
             {/* Admin Routes */}
