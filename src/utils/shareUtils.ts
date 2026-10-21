@@ -72,12 +72,14 @@ export function resolveSubjectName(
  *
  * Missing fields are omitted gracefully without printing undefined, null, or incorrect data.
  */
+export const OFFICIAL_SHARE_LINK = 'https://campusnotes.space';
+
 export function formatShareText(
   material: ShareMaterialMetadata,
   subjectName?: string | null,
-  shareUrl?: string
+  shareUrl: string = OFFICIAL_SHARE_LINK
 ): string {
-  const lines: string[] = ['CampusNotes — Study Material', ''];
+  const lines: string[] = ['CampusNotes — Study Material'];
 
   if (subjectName && subjectName.trim()) {
     lines.push(`Subject: ${subjectName.trim()}`);
@@ -136,18 +138,17 @@ export function formatShareText(
     lines.push(`PDF: ${pdfTitle}`);
   }
 
-  // Working material link
-  if (shareUrl && shareUrl.trim()) {
-    lines.push('');
-    lines.push(`View PDF: ${shareUrl.trim()}`);
-  }
+  // Working material link - exactly one link: https://campusnotes.space
+  const link = shareUrl && shareUrl.trim() ? shareUrl.trim() : OFFICIAL_SHARE_LINK;
+  lines.push(`View PDF: ${link}`);
 
   return lines.join('\n');
 }
 
 /**
  * Shared utility for sharing CampusNotes study materials:
- * 1. Generates a canonical, stable URL using the application routing: `${window.location.origin}/materials/${material.id}`.
+ * 1. Generates a canonical, stable URL: https://campusnotes.space.
+ *    // Internal route reference: ${window.location.origin}/materials/${material.id}
  * 2. Uses the native Web Share API (navigator.share) on supported platforms (Android, iOS, modern desktop).
  * 3. Gracefully handles user cancellation (AbortError) without false error notifications.
  * 4. Provides a robust fallback to clipboard copying (via navigator.clipboard or textarea execCommand).
@@ -168,19 +169,17 @@ export async function shareMaterial(
     return false;
   }
 
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const shareUrl =
-    typeof window !== 'undefined'
-      ? `${window.location.origin}/materials/${material.id}`
-      : `/materials/${material.id}`;
+  // Use the single official domain (without internal /materials/ route or Render domain)
+  // Internal route reference: ${window.location.origin}/materials/${material.id}
+  const shareUrl = OFFICIAL_SHARE_LINK;
 
   const subjectName = resolveSubjectName(material, subject);
   const formattedText = formatShareText(material, subjectName, shareUrl);
 
+  // Avoid duplicating the link by only providing text (which already embeds the single official URL)
   const shareData = {
     title: material.title ? `${material.title} — CampusNotes` : 'CampusNotes — Study Material',
     text: formattedText,
-    url: shareUrl,
   };
 
   // 1. Try native Web Share API (Mobile phones, tablets, supported desktop browsers)
