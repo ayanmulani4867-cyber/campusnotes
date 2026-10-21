@@ -169,9 +169,9 @@ export async function shareMaterial(
     return false;
   }
 
-  // Use the single official domain (without internal /materials/ route or Render domain)
-  // Internal route reference: ${window.location.origin}/materials/${material.id}
-  const shareUrl = OFFICIAL_SHARE_LINK;
+  // Use the official domain with the exact material ID route
+  // Canonical URL reference: ${window.location.origin}/materials/${material.id}
+  const shareUrl = `https://campusnotes.space/materials/${material.id}`;
 
   const subjectName = resolveSubjectName(material, subject);
   const formattedText = formatShareText(material, subjectName, shareUrl);
@@ -181,6 +181,22 @@ export async function shareMaterial(
     title: material.title ? `${material.title} — CampusNotes` : 'CampusNotes — Study Material',
     text: formattedText,
   };
+
+  // Open modern interactive Share Sheet on browser allowing selection of WhatsApp, Telegram, etc.
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('campusnotes:share', {
+        detail: {
+          material,
+          subjectName,
+          formattedText,
+          shareUrl,
+          title: shareData.title,
+        },
+      })
+    );
+    return true;
+  }
 
   // 1. Try native Web Share API (Mobile phones, tablets, supported desktop browsers)
   if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
@@ -205,7 +221,7 @@ export async function shareMaterial(
 
   // 2. Clipboard API fallback
   let copied = false;
-  if (typeof navigator !== 'undefined' && navigator.clipboard && window.isSecureContext) {
+  if (typeof navigator !== 'undefined' && navigator.clipboard) {
     try {
       await navigator.clipboard.writeText(formattedText);
       copied = true;

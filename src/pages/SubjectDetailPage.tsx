@@ -249,28 +249,6 @@ export const SubjectDetailPage: React.FC = () => {
 
       {/* Category Tabs & Quick Search */}
       <div className="space-y-3 w-full max-w-full min-w-0">
-        {/* Mobile Quick Category Selector Dropdown (visible on narrow screens) */}
-        <div className="sm:hidden w-full min-w-0">
-          <label htmlFor="mobile-cat-select" className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1 px-1">
-            Browse Category
-          </label>
-          <select
-            id="mobile-cat-select"
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="w-full min-h-[44px] px-3.5 py-2.5 text-xs font-semibold bg-white border border-slate-200 rounded-xl text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-600 box-border"
-          >
-            <option value="">All Resources ({materials.length})</option>
-            {CATEGORIES.map((cat) => {
-              const count = materials.filter((m) => m.category === cat.id && m.published).length;
-              return (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name} ({count})
-                </option>
-              );
-            })}
-          </select>
-        </div>
 
         {/* Strictly Contained Horizontal Category Pills */}
         <div className="w-full max-w-full min-w-0 overflow-x-auto pb-1.5 no-scrollbar scroll-smooth touch-pan-x">

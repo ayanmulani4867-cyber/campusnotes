@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Filter, RotateCcw } from 'lucide-react';
+import { Search, RotateCcw, ChevronDown } from 'lucide-react';
 import { Subject, MaterialFilterState, CATEGORIES } from '../../types';
 
 interface MaterialFilterProps {
@@ -28,7 +28,7 @@ export const MaterialFilter: React.FC<MaterialFilterProps> = ({
 
   return (
     <div className="bg-white rounded-lg border border-slate-200 p-3.5 sm:p-5 space-y-4">
-      {/* Top Search bar */}
+      {/* 1. Primary Control: Top Search bar */}
       <div className="relative">
         <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
         <input
@@ -49,7 +49,7 @@ export const MaterialFilter: React.FC<MaterialFilterProps> = ({
         )}
       </div>
 
-      {/* Category Pills (horizontal scrollable on mobile) */}
+      {/* 2. Primary Control: Category Pills (horizontal scrollable on mobile) */}
       <div className="w-full max-w-full min-w-0 overflow-x-auto pb-1.5 no-scrollbar touch-pan-x">
         <div className="inline-flex items-center gap-1.5 min-w-max">
           <button
@@ -83,70 +83,76 @@ export const MaterialFilter: React.FC<MaterialFilterProps> = ({
         </div>
       </div>
 
-      {/* Dropdown Filters Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 border-t border-slate-100">
-        {/* Subject Dropdown */}
-        <div>
-          <label className="block text-[11px] font-medium text-slate-500 mb-1">
-            Subject
-          </label>
-          <select
-            value={filters.subjectId}
-            onChange={(e) => onFilterChange({ subjectId: e.target.value })}
-            className="w-full min-h-[42px] text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium"
-          >
-            <option value="">All Subjects</option>
-            {subjects.map((sub) => (
-              <option key={sub.id} value={sub.id}>
-                {sub.code} — {sub.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Academic Year */}
-        <div>
-          <label className="block text-[11px] font-medium text-slate-500 mb-1">
-            Academic Year
-          </label>
-          <select
-            value={filters.academicYear}
-            onChange={(e) => onFilterChange({ academicYear: e.target.value })}
-            className="w-full min-h-[42px] text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium"
-          >
-            <option value="">All Academic Years</option>
-            {academicYears.map((yr) => (
-              <option key={yr} value={yr}>
-                {yr}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Sort By */}
-        <div>
-          <label className="block text-[11px] font-medium text-slate-500 mb-1">
-            Sort Order
-          </label>
-          <select
-            value={filters.sortBy}
-            onChange={(e) =>
-              onFilterChange({
-                sortBy: e.target.value as MaterialFilterState['sortBy'],
-              })
-            }
-            className="w-full min-h-[42px] text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium"
-          >
-            <option value="newest">Newest Uploads First</option>
-            <option value="oldest">Oldest First</option>
-            <option value="title">Title (Alphabetical A-Z)</option>
-            <option value="size">File Size (Largest First)</option>
-          </select>
-        </div>
+      {/* 3. Primary Control: Subject Filter */}
+      <div className="pt-1 border-t border-slate-100">
+        <label className="block text-[11px] font-medium text-slate-500 mb-1">
+          Subject
+        </label>
+        <select
+          value={filters.subjectId}
+          onChange={(e) => onFilterChange({ subjectId: e.target.value })}
+          className="w-full min-h-[42px] text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium"
+        >
+          <option value="">All Subjects</option>
+          {subjects.map((sub) => (
+            <option key={sub.id} value={sub.id}>
+              {sub.code} — {sub.name}
+            </option>
+          ))}
+        </select>
       </div>
 
+      {/* 4. Compact Expandable Area for Secondary Filters (Sort & Academic Year) */}
+      <details className="group pt-1 border-t border-slate-100">
+        <summary className="text-xs font-medium text-slate-500 hover:text-slate-800 cursor-pointer flex items-center justify-between py-1 select-none">
+          <span>More options (Sort Order & Academic Year)</span>
+          <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-open:rotate-180 transition-transform" />
+        </summary>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2.5">
+          {/* Sort By */}
+          <div>
+            <label className="block text-[11px] font-medium text-slate-500 mb-1">
+              Sort Order
+            </label>
+            <select
+              value={filters.sortBy}
+              onChange={(e) =>
+                onFilterChange({
+                  sortBy: e.target.value as MaterialFilterState['sortBy'],
+                })
+              }
+              className="w-full min-h-[42px] text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium"
+            >
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+              <option value="title">Title (A-Z)</option>
+            </select>
+          </div>
+
+          {/* Academic Year */}
+          <div>
+            <label className="block text-[11px] font-medium text-slate-500 mb-1">
+              Academic Year
+            </label>
+            <select
+              value={filters.academicYear}
+              onChange={(e) => onFilterChange({ academicYear: e.target.value })}
+              className="w-full min-h-[42px] text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium"
+            >
+              <option value="">All Academic Years</option>
+              {academicYears.map((yr) => (
+                <option key={yr} value={yr}>
+                  {yr}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </details>
+
       {/* Results Counter & Reset */}
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 pt-1">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 pt-1 border-t border-slate-100">
         <span>
           Showing <strong className="text-slate-800">{totalResults}</strong> verified materials
         </span>

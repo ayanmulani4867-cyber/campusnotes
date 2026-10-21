@@ -4,6 +4,7 @@ import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { Navbar } from './components/common/Navbar';
 import { Footer } from './components/common/Footer';
+import { ShareModal } from './components/common/ShareModal';
 import { RefreshCw } from 'lucide-react';
 import { MaintenanceGuard } from './components/common/MaintenanceGuard';
 import { ScrollToTop } from './components/common/ScrollToTop';
@@ -62,6 +63,7 @@ const AppContent: React.FC = () => {
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans selection:bg-blue-600 selection:text-white w-full max-w-full">
       <ScrollToTop />
       <Navbar />
+      <ShareModal />
       <main className="flex-1 flex flex-col w-full max-w-full min-w-0">
         <Suspense fallback={<PageLoader />}>
           <Routes>
