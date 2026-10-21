@@ -139,6 +139,26 @@ test('Worker supports RFC 7233 Range headers (206 Partial Content, 416 Unsatisfi
   assert(workerCode.includes("status: 304"), 'Worker missing 304 status code for ETag match');
 });
 
+test('Worker supports If-Range validator for safe resumable downloads', () => {
+  assert(workerCode.includes("const ifRange = request.headers.get('If-Range')"), 'Worker missing If-Range header handling');
+  assert(workerCode.includes("isRangeApplicable"), 'Worker must check If-Range validator match before serving 206');
+});
+
+test('Worker includes canonical campusnotes.space in DEFAULT_ALLOWED_ORIGINS and CORS', () => {
+  assert(workerCode.includes("'https://campusnotes.space'"), 'Worker missing https://campusnotes.space in DEFAULT_ALLOWED_ORIGINS');
+  assert(workerCode.includes("If-Range"), 'Worker Access-Control-Allow-Headers must expose If-Range');
+});
+
+test('firebaseService exports high-speed decodeBase64ToUint8Array without string duplication', () => {
+  assert(fbServiceCode.includes('export function decodeBase64ToUint8Array('), 'Missing export decodeBase64ToUint8Array');
+  assert(fbServiceCode.includes('const bytes = decodeBase64ToUint8Array(cleanData)'), 'base64ToBlob must use decodeBase64ToUint8Array');
+});
+
+test('downloadStudyMaterial implements rapid-click debounce and in-flight deduplication', () => {
+  assert(fbServiceCode.includes('DOWNLOAD_DEBOUNCE_MS'), 'Missing DOWNLOAD_DEBOUNCE_MS debounce');
+  assert(fbServiceCode.includes('inFlightDownloads'), 'Missing inFlightDownloads deduplication');
+});
+
 // -----------------------------------------------------------------------------
 // Suite 4: Vite Chunk Splitting & Client Bundle Optimization
 // -----------------------------------------------------------------------------

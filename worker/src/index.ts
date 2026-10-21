@@ -7,6 +7,8 @@ import { verifyAdminRequest } from './auth.ts';
 import { getPublicMaterialMetadata, getAdminMaterialMetadata, invalidatePublicMaterialCache } from './firebase.ts';
 
 const DEFAULT_ALLOWED_ORIGINS = [
+  'https://campusnotes.space',
+  'https://www.campusnotes.space',
   'https://campusnotes-ifpr.onrender.com',
   'http://localhost:5173',
   'http://localhost:4173',
@@ -32,7 +34,7 @@ function buildCorsHeaders(request: Request, env: Env): Headers {
   const headers = new Headers();
   headers.set('Access-Control-Allow-Origin', allowOriginValue);
   headers.set('Access-Control-Allow-Methods', 'GET, HEAD, PUT, DELETE, OPTIONS');
-  headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Range, X-Filename, If-None-Match');
+  headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Range, X-Filename, If-None-Match, If-Range, If-Match');
   headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Disposition, Content-Range, ETag, Accept-Ranges');
   headers.set('Access-Control-Max-Age', '86400');
   return headers;
@@ -199,8 +201,9 @@ export default {
       const ifNoneMatch = request.headers.get('If-None-Match');
       const hasCacheApi = typeof caches !== 'undefined' && Boolean(caches.default);
 
-      // Check Cloudflare Edge Cache for full GET requests (published materials only)
-      if (hasCacheApi && request.method === 'GET' && !rangeHeader) {
+      // Check Cloudflare Edge Cache for full GET requests (published materials only, unauthenticated)
+      const hasAuthHeader = Boolean(request.headers.get('Authorization'));
+      if (hasCacheApi && request.method === 'GET' && !rangeHeader && !hasAuthHeader) {
         try {
           const cacheKey = new Request(url.toString(), { method: 'GET' });
           const cachedResponse = await caches.default.match(cacheKey);
@@ -305,6 +308,8 @@ export default {
       }
 
       // Path B: HEAD requests or Range requests
+      const ifRange = request.headers.get('If-Range');
+
       let headObj = typeof env.PDF_BUCKET.head === 'function' ? await env.PDF_BUCKET.head(r2Key) : null;
       if (!headObj) {
         const fallbackObj = await env.PDF_BUCKET.get(r2Key);
@@ -341,7 +346,10 @@ export default {
       }
 
       // Range handling per RFC 7233 / RFC 9110
-      if (rangeHeader) {
+      // Check If-Range validator if supplied: If-Range must match current ETag to serve 206
+      const isRangeApplicable = Boolean(rangeHeader) && (!ifRange || ifRange === headObj.httpEtag || ifRange === `W/${headObj.httpEtag}`);
+
+      if (isRangeApplicable && rangeHeader) {
         const parsed = parseByteRange(rangeHeader, totalSize);
         if (parsed === 'unsatisfiable' || parsed === 'invalid') {
           headers.set('Content-Range', `bytes */${totalSize}`);

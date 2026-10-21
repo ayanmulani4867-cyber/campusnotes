@@ -40,7 +40,11 @@ export async function getPublicMaterialMetadata(
       headers: {
         Accept: 'application/json',
       },
-    });
+      cf: {
+        cacheTtl: 300,
+        cacheEverything: true,
+      },
+    } as RequestInit);
 
     if (!res.ok) {
       publicMetadataCache.set(materialId, { record: null, expires: now + 60000 });
