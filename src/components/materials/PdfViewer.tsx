@@ -141,12 +141,16 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material, subject }) => {
     }
   };
 
-  const isLocalOrBlob =
-    resolvedUrl?.startsWith('blob:') ||
-    resolvedUrl?.startsWith('/') ||
-    resolvedUrl?.startsWith('data:');
+  const isDirectPdf =
+    Boolean(resolvedUrl) &&
+    (resolvedUrl!.startsWith('blob:') ||
+      resolvedUrl!.startsWith('/') ||
+      resolvedUrl!.startsWith('data:') ||
+      resolvedUrl!.includes('.workers.dev') ||
+      resolvedUrl!.endsWith('.pdf') ||
+      resolvedUrl!.includes('/pdf'));
 
-  const viewerSrc = isLocalOrBlob
+  const viewerSrc = isDirectPdf
     ? (resolvedUrl || '')
     : resolvedUrl
     ? `https://docs.google.com/viewer?url=${encodeURIComponent(resolvedUrl)}&embedded=true`

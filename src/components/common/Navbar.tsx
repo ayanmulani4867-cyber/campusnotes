@@ -15,9 +15,10 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { CATEGORIES } from '../../types';
 import { OFFICIAL_CSE_SEM_5_SUBJECTS } from '../../constants/subjects';
+import { prefetchRoute } from '../../utils/routePrefetch';
 
 export const Navbar: React.FC = () => {
-  const { isAuthenticated, admin } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -88,6 +89,8 @@ export const Navbar: React.FC = () => {
 
             <Link
               to="/subjects"
+              onPointerEnter={() => prefetchRoute('subjects')}
+              onTouchStart={() => prefetchRoute('subjects')}
               className={`px-3 py-1.5 rounded-md transition-colors ${
                 isActive('/subjects')
                   ? 'text-blue-600 bg-blue-50 font-semibold'
@@ -99,6 +102,8 @@ export const Navbar: React.FC = () => {
 
             <Link
               to="/materials"
+              onPointerEnter={() => prefetchRoute('materials')}
+              onTouchStart={() => prefetchRoute('materials')}
               className={`px-3 py-1.5 rounded-md transition-colors ${
                 isActive('/materials') && !location.search.includes('assignments') && !location.search.includes('experiments')
                   ? 'text-blue-600 bg-blue-50 font-semibold'
@@ -110,6 +115,8 @@ export const Navbar: React.FC = () => {
 
             <Link
               to="/category/assignments"
+              onPointerEnter={() => prefetchRoute('category')}
+              onTouchStart={() => prefetchRoute('category')}
               className={`px-3 py-1.5 rounded-md transition-colors ${
                 location.pathname === '/category/assignments'
                   ? 'text-blue-600 bg-blue-50 font-semibold'
@@ -121,6 +128,8 @@ export const Navbar: React.FC = () => {
 
             <Link
               to="/category/experiments"
+              onPointerEnter={() => prefetchRoute('category')}
+              onTouchStart={() => prefetchRoute('category')}
               className={`px-3 py-1.5 rounded-md transition-colors ${
                 location.pathname === '/category/experiments'
                   ? 'text-blue-600 bg-blue-50 font-semibold'
@@ -135,6 +144,7 @@ export const Navbar: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setCategoriesOpen(!categoriesOpen)}
+                onPointerEnter={() => prefetchRoute('category')}
                 onBlur={() => setTimeout(() => setCategoriesOpen(false), 200)}
                 className={`flex items-center gap-1 px-3 py-1.5 rounded-md transition-colors ${
                   location.pathname.startsWith('/category') &&
@@ -154,6 +164,7 @@ export const Navbar: React.FC = () => {
                     <Link
                       key={cat.id}
                       to={`/category/${cat.id}`}
+                      onPointerEnter={() => prefetchRoute('category')}
                       onClick={() => setCategoriesOpen(false)}
                       className="flex items-center justify-between px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors"
                     >
@@ -166,6 +177,8 @@ export const Navbar: React.FC = () => {
 
             <Link
               to="/about"
+              onPointerEnter={() => prefetchRoute('about')}
+              onTouchStart={() => prefetchRoute('about')}
               className={`px-3 py-1.5 rounded-md transition-colors ${
                 isActive('/about')
                   ? 'text-blue-600 bg-blue-50 font-semibold'

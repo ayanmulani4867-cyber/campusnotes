@@ -41,9 +41,12 @@ export const SubjectDetailPage: React.FC = () => {
   });
   const [materials, setMaterials] = useState<StudyMaterial[]>(() => {
     if (!subjectId) return [];
-    const cached = cacheService.get<StudyMaterial[]>(`public_materials_subject_${subjectId}`);
+    const cached =
+      cacheService.get<StudyMaterial[]>(`public_materials_subject_${subjectId}`) ||
+      cacheService.get<StudyMaterial[]>(`subject_materials_${subjectId}`);
     if (cached && cached.length > 0) return cached;
     const allMats =
+      cacheService.get<StudyMaterial[]>('public_materials') ||
       cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
       cacheService.get<StudyMaterial[]>('public_materials_limit_100');
     if (allMats) {
@@ -64,9 +67,13 @@ export const SubjectDetailPage: React.FC = () => {
   });
   const [materialsLoading, setMaterialsLoading] = useState<boolean>(() => {
     if (!subjectId) return true;
-    const cached = cacheService.get<StudyMaterial[]>(`public_materials_subject_${subjectId}`);
+    const cached =
+      cacheService.get<StudyMaterial[]>(`public_materials_subject_${subjectId}`) ||
+      cacheService.get<StudyMaterial[]>(`subject_materials_${subjectId}`);
     if (cached && cached.length > 0) return false;
-    const allMats = cacheService.get<StudyMaterial[]>('public_materials_limit_150');
+    const allMats =
+      cacheService.get<StudyMaterial[]>('public_materials') ||
+      cacheService.get<StudyMaterial[]>('public_materials_limit_150');
     if (allMats && allMats.some((m) => m.subjectId === subjectId)) return false;
     return true;
   });

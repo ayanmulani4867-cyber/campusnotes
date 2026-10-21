@@ -38,6 +38,7 @@ export const MaterialDetailPage: React.FC = () => {
     const directCached = cacheService.get<StudyMaterial>(`material_${materialId}`);
     if (directCached) return directCached;
     const catalog =
+      cacheService.get<StudyMaterial[]>('public_materials') ||
       cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
       cacheService.get<StudyMaterial[]>('public_materials_limit_100');
     if (catalog) {
@@ -50,7 +51,11 @@ export const MaterialDetailPage: React.FC = () => {
     if (!materialId) return null;
     const note =
       cacheService.get<StudyMaterial>(`material_${materialId}`) ||
-      (cacheService.get<StudyMaterial[]>('public_materials_limit_150') || []).find((m) => m.id === materialId);
+      (
+        cacheService.get<StudyMaterial[]>('public_materials') ||
+        cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
+        []
+      ).find((m) => m.id === materialId);
     if (note) {
       const subs = cacheService.get<Subject[]>('public_subjects');
       if (subs) {
@@ -66,6 +71,7 @@ export const MaterialDetailPage: React.FC = () => {
     const directCached = cacheService.get<StudyMaterial>(`material_${materialId}`);
     if (directCached) return false;
     const catalog =
+      cacheService.get<StudyMaterial[]>('public_materials') ||
       cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
       cacheService.get<StudyMaterial[]>('public_materials_limit_100');
     return !catalog || !catalog.some((m) => m.id === materialId);

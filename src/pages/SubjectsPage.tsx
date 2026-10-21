@@ -30,6 +30,7 @@ export const SubjectsPage: React.FC = () => {
   });
   const [materials, setMaterials] = useState<StudyMaterial[]>(() => {
     return (
+      cacheService.get<StudyMaterial[]>('public_materials') ||
       cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
       cacheService.get<StudyMaterial[]>('public_materials_limit_100') ||
       []
@@ -37,7 +38,7 @@ export const SubjectsPage: React.FC = () => {
   });
   const [loading, setLoading] = useState<boolean>(() => {
     const cached = cacheService.get<Subject[]>('public_subjects');
-    return !cached || cached.length === 0;
+    return (!cached || cached.length === 0) && OFFICIAL_CSE_SEM_5_SUBJECTS.length === 0;
   });
 
   useEffect(() => {

@@ -26,7 +26,12 @@ import {
 export const HomePage: React.FC = () => {
   // Synchronous state initialization from cache / static baseline for near-instant first paint
   const [materials, setMaterials] = useState<StudyMaterial[]>(() => {
-    return cacheService.get<StudyMaterial[]>('public_materials_limit_100') || [];
+    return (
+      cacheService.get<StudyMaterial[]>('public_materials') ||
+      cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
+      cacheService.get<StudyMaterial[]>('public_materials_limit_100') ||
+      []
+    );
   });
   const [subjects, setSubjects] = useState<Subject[]>(() => {
     const cached = cacheService.get<Subject[]>('public_subjects');
@@ -37,8 +42,11 @@ export const HomePage: React.FC = () => {
       updatedAt: 0,
     }));
   });
-  const [loading, setLoading] = useState<boolean>(() => {
-    const cached = cacheService.get<StudyMaterial[]>('public_materials_limit_100');
+  const [materialsLoading, setMaterialsLoading] = useState<boolean>(() => {
+    const cached =
+      cacheService.get<StudyMaterial[]>('public_materials') ||
+      cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
+      cacheService.get<StudyMaterial[]>('public_materials_limit_100');
     return !cached || cached.length === 0;
   });
   const [searchQuery, setSearchQuery] = useState('');
@@ -52,12 +60,12 @@ export const HomePage: React.FC = () => {
       (data) => {
         if (!isMounted) return;
         setMaterials(data);
-        setLoading(false);
+        setMaterialsLoading(false);
       },
-      100,
+      150,
       (err) => {
         console.warn('Home materials listener notice:', err);
-        if (isMounted) setLoading(false);
+        if (isMounted) setMaterialsLoading(false);
       }
     );
 
@@ -207,7 +215,7 @@ export const HomePage: React.FC = () => {
           </Link>
         </div>
 
-        {loading ? (
+        {subjects.length === 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <SubjectCardSkeleton />
             <SubjectCardSkeleton />
@@ -269,7 +277,7 @@ export const HomePage: React.FC = () => {
           </Link>
         </div>
 
-        {loading ? (
+        {materialsLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <MaterialCardSkeleton />
             <MaterialCardSkeleton />

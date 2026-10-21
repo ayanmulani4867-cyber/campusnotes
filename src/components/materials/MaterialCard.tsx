@@ -16,6 +16,7 @@ import { StudyMaterial, Subject, CATEGORIES } from '../../types';
 import { downloadStudyMaterial } from '../../services/firebaseService';
 import { shareMaterial } from '../../utils/shareUtils';
 import { useToast } from '../../context/ToastContext';
+import { prefetchRoute } from '../../utils/routePrefetch';
 
 interface MaterialCardProps {
   material: StudyMaterial;
@@ -121,6 +122,8 @@ export const MaterialCard: React.FC<MaterialCardProps> = React.memo(({
       tabIndex={0}
       onClick={handleCardClick}
       onKeyDown={handleKeyDown}
+      onPointerEnter={() => prefetchRoute('materialDetail')}
+      onTouchStart={() => prefetchRoute('materialDetail')}
       aria-label={`${material.title} (${categoryMeta.name})`}
       className="group relative bg-white rounded-xl sm:rounded-2xl border border-slate-200/90 p-4 sm:p-5 hover:border-slate-300 hover:shadow-md transition-all flex flex-col justify-between active:scale-[0.99] touch-manipulation shadow-sm w-full max-w-full min-w-0 box-border cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
     >

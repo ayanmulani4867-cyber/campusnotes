@@ -24,6 +24,7 @@ export const CategoryPage: React.FC = () => {
   // Synchronous state initialization from cache / static baseline for instant category render
   const [materials, setMaterials] = useState<StudyMaterial[]>(() => {
     return (
+      cacheService.get<StudyMaterial[]>('public_materials') ||
       cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
       cacheService.get<StudyMaterial[]>('public_materials_limit_100') ||
       []
@@ -40,6 +41,7 @@ export const CategoryPage: React.FC = () => {
   });
   const [loading, setLoading] = useState<boolean>(() => {
     const cached =
+      cacheService.get<StudyMaterial[]>('public_materials') ||
       cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
       cacheService.get<StudyMaterial[]>('public_materials_limit_100');
     return !cached || cached.length === 0;

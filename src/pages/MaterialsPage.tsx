@@ -20,6 +20,7 @@ export const MaterialsPage: React.FC = () => {
   // Instant state initialization from cache to prevent skeleton flashing
   const [materials, setMaterials] = useState<StudyMaterial[]>(() => {
     return (
+      cacheService.get<StudyMaterial[]>('public_materials') ||
       cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
       cacheService.get<StudyMaterial[]>('public_materials_limit_100') ||
       []
@@ -36,6 +37,7 @@ export const MaterialsPage: React.FC = () => {
   });
   const [loading, setLoading] = useState<boolean>(() => {
     const cached =
+      cacheService.get<StudyMaterial[]>('public_materials') ||
       cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
       cacheService.get<StudyMaterial[]>('public_materials_limit_100');
     return !cached || cached.length === 0;

@@ -257,54 +257,94 @@ export function revokeBlobUrl(blobId: string): void {
 }
 
 // ==========================================
+// In-flight deduplication map for concurrent metadata requests
+const inFlightMetadataRequests = new Map<string, Promise<any>>();
+
+/**
+ * Cross-indexes a materials array into individual items and subject groups
+ * so subsequent detail views and subject filters resolve in 0ms without network round trips.
+ */
+export function indexMaterialsInCache(materials: StudyMaterial[]): void {
+  const bySubject = new Map<string, StudyMaterial[]>();
+
+  for (const m of materials) {
+    cacheService.set(`material_${m.id}`, m, 180_000);
+    if (m.subjectId) {
+      const list = bySubject.get(m.subjectId) || [];
+      list.push(m);
+      bySubject.set(m.subjectId, list);
+    }
+  }
+
+  for (const [subId, list] of bySubject.entries()) {
+    list.sort(compareMaterialsAscending);
+    cacheService.set(`public_materials_subject_${subId}`, list, 180_000);
+    cacheService.set(`subject_materials_${subId}`, list, 180_000);
+  }
+}
+
+// ==========================================
 // PUBLIC METHODS (Cached & Partitioned)
 // ==========================================
 
 /**
- * Fetch active subjects for CSE Semester 5
+ * Fetch active subjects for CSE Semester 5 with in-flight deduplication
  */
 export async function getPublicSubjects(): Promise<Subject[]> {
   const cacheKey = 'public_subjects';
   const cached = cacheService.get<Subject[]>(cacheKey);
   if (cached && cached.length > 0) return cached;
 
-  let subjectsList: Subject[] = [];
+  const inFlightKey = 'getPublicSubjects';
+  const existing = inFlightMetadataRequests.get(inFlightKey);
+  if (existing) return existing;
 
-  if (isFirebaseConfigured && database) {
+  const fetchPromise = (async () => {
     try {
-      const subjectsRef = ref(database, 'subjects');
-      const snapshot = await get(subjectsRef);
+      let subjectsList: Subject[] = [];
 
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        subjectsList = Object.keys(data).map((id) => ({
-          ...data[id],
-          id,
+      if (isFirebaseConfigured && database) {
+        try {
+          const subjectsRef = ref(database, 'subjects');
+          const snapshot = await get(subjectsRef);
+
+          if (snapshot.exists()) {
+            const data = snapshot.val();
+            subjectsList = Object.keys(data).map((id) => ({
+              ...data[id],
+              id,
+            }));
+          }
+        } catch (err: unknown) {
+          console.warn('Notice reading public subjects from RTDB:', err);
+        }
+      }
+
+      // If database is empty or uninitialized, provide the 9 official subjects
+      if (subjectsList.length === 0) {
+        const now = Date.now();
+        subjectsList = OFFICIAL_CSE_SEM_5_SUBJECTS.map((s) => ({
+          ...s,
+          createdAt: now,
+          updatedAt: now,
         }));
       }
-    } catch (err: unknown) {
-      console.warn('Notice reading public subjects from RTDB:', err);
+
+      // Filter out any excluded subjects and prevent duplicates
+      const sanitized = sanitizeSubjects(subjectsList);
+      const activeSubjects = sanitized
+        .filter((s) => s.active !== false)
+        .sort((a, b) => a.code.localeCompare(b.code));
+
+      cacheService.set(cacheKey, activeSubjects, 180_000); // 3 minutes cache
+      return activeSubjects;
+    } finally {
+      inFlightMetadataRequests.delete(inFlightKey);
     }
-  }
+  })();
 
-  // If database is empty or uninitialized, provide the 9 official subjects
-  if (subjectsList.length === 0) {
-    const now = Date.now();
-    subjectsList = OFFICIAL_CSE_SEM_5_SUBJECTS.map((s) => ({
-      ...s,
-      createdAt: now,
-      updatedAt: now,
-    }));
-  }
-
-  // Filter out any excluded subjects and prevent duplicates
-  const sanitized = sanitizeSubjects(subjectsList);
-  const activeSubjects = sanitized
-    .filter((s) => s.active !== false)
-    .sort((a, b) => a.code.localeCompare(b.code));
-
-  cacheService.set(cacheKey, activeSubjects, 180_000); // 3 minutes cache
-  return activeSubjects;
+  inFlightMetadataRequests.set(inFlightKey, fetchPromise);
+  return fetchPromise;
 }
 
 /**
@@ -313,116 +353,197 @@ export async function getPublicSubjects(): Promise<Subject[]> {
  */
 export async function getPublicMaterials(limit = 100): Promise<StudyMaterial[]> {
   const cacheKey = `public_materials_limit_${limit}`;
-  const cached = cacheService.get<StudyMaterial[]>(cacheKey);
-  if (cached) return cached;
+  const cached =
+    cacheService.get<StudyMaterial[]>('public_materials') ||
+    cacheService.get<StudyMaterial[]>(cacheKey) ||
+    cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
+    cacheService.get<StudyMaterial[]>('public_materials_limit_100');
 
-  let materials: StudyMaterial[] = [];
+  if (cached && cached.length >= limit) return cached.slice(0, limit);
+  if (cached && cached.length > 0) return cached;
 
-  if (isFirebaseConfigured && database) {
+  const inFlightKey = `getPublicMaterials_${limit}`;
+  const existing = inFlightMetadataRequests.get(inFlightKey);
+  if (existing) return existing;
+
+  const fetchPromise = (async () => {
     try {
-      const pubRef = ref(database, 'publicMaterials');
-      const q = query(pubRef, orderByChild('createdAt'), limitToLast(limit));
-      const snapshot = await get(q);
+      let materials: StudyMaterial[] = [];
 
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        materials = Object.keys(data)
-          .map((id) => ({
-            ...data[id],
-            id,
-          }))
-          .filter((m) => m.published === true);
-        materials.sort(compareMaterialsAscending);
+      if (isFirebaseConfigured && database) {
+        try {
+          const pubRef = ref(database, 'publicMaterials');
+          const q = query(pubRef, orderByChild('createdAt'), limitToLast(limit));
+          const snapshot = await get(q);
+
+          if (snapshot.exists()) {
+            const data = snapshot.val();
+            materials = Object.keys(data)
+              .map((id) => ({
+                ...data[id],
+                id,
+              }))
+              .filter((m) => m.published === true);
+            materials.sort(compareMaterialsAscending);
+          }
+        } catch (err: unknown) {
+          console.warn('Notice reading public materials from RTDB:', err);
+        }
       }
-    } catch (err: unknown) {
-      console.warn('Notice reading public materials from RTDB:', err);
+
+      // Fallback to standard initial demo materials if database is empty
+      if (materials.length === 0) {
+        const demo = await loadDemoMaterials();
+        materials = demo.filter((m) => m.published === true).slice(0, limit);
+      }
+
+      cacheService.set('public_materials', materials, 120_000);
+      cacheService.set(cacheKey, materials, 120_000);
+      indexMaterialsInCache(materials);
+      return materials;
+    } finally {
+      inFlightMetadataRequests.delete(inFlightKey);
     }
-  }
+  })();
 
-  // Fallback to standard initial demo materials if database is empty
-  if (materials.length === 0) {
-    const demo = await loadDemoMaterials();
-    materials = demo.filter((m) => m.published === true).slice(0, limit);
-  }
-
-  cacheService.set(cacheKey, materials, 60_000); // 1 minute cache
-  return materials;
+  inFlightMetadataRequests.set(inFlightKey, fetchPromise);
+  return fetchPromise;
 }
 
 /**
- * Fetch a single published material by its unique ID
+ * Fetch a single published material by its unique ID.
+ * Checks memory index and cached catalog first for instant 0ms resolution.
  */
 export async function getPublicMaterialById(id: string): Promise<StudyMaterial | null> {
   const cacheKey = `material_${id}`;
   const cached = cacheService.get<StudyMaterial>(cacheKey);
   if (cached) return cached;
 
-  if (isFirebaseConfigured && database) {
-    try {
-      const materialRef = ref(database, `publicMaterials/${id}`);
-      const snapshot = await get(materialRef);
+  // Check if material already exists in cached public catalog
+  const catalog =
+    cacheService.get<StudyMaterial[]>('public_materials') ||
+    cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
+    cacheService.get<StudyMaterial[]>('public_materials_limit_100');
 
-      if (snapshot.exists()) {
-        const val = snapshot.val();
-        if (val && val.published === true) {
-          const material: StudyMaterial = {
-            ...val,
-            id,
-          };
-          cacheService.set(cacheKey, material, 120_000);
-          return material;
-        }
-      }
-    } catch (err: unknown) {
-      console.warn(`Notice fetching material ${id} from RTDB:`, err);
+  if (catalog) {
+    const found = catalog.find((m) => m.id === id);
+    if (found) {
+      cacheService.set(cacheKey, found, 180_000);
+      return found;
     }
   }
 
-  const demo = await loadDemoMaterials();
-  const fallback = demo.find((m) => m.id === id && m.published === true) || null;
-  if (fallback) cacheService.set(cacheKey, fallback, 120_000);
-  return fallback;
+  const inFlightKey = `getPublicMaterialById_${id}`;
+  const existing = inFlightMetadataRequests.get(inFlightKey);
+  if (existing) return existing;
+
+  const fetchPromise = (async () => {
+    try {
+      if (isFirebaseConfigured && database) {
+        try {
+          const materialRef = ref(database, `publicMaterials/${id}`);
+          const snapshot = await get(materialRef);
+
+          if (snapshot.exists()) {
+            const val = snapshot.val();
+            if (val && val.published === true) {
+              const material: StudyMaterial = {
+                ...val,
+                id,
+              };
+              cacheService.set(cacheKey, material, 180_000);
+              return material;
+            }
+          }
+        } catch (err: unknown) {
+          console.warn(`Notice fetching material ${id} from RTDB:`, err);
+        }
+      }
+
+      const demo = await loadDemoMaterials();
+      const fallback = demo.find((m) => m.id === id && m.published === true) || null;
+      if (fallback) cacheService.set(cacheKey, fallback, 180_000);
+      return fallback;
+    } finally {
+      inFlightMetadataRequests.delete(inFlightKey);
+    }
+  })();
+
+  inFlightMetadataRequests.set(inFlightKey, fetchPromise);
+  return fetchPromise;
 }
 
 /**
- * Fetch materials for a specific subject
+ * Fetch materials for a specific subject.
+ * Reuses catalog cache when available for zero-latency subject navigation.
  */
 export async function getPublicMaterialsBySubject(subjectId: string): Promise<StudyMaterial[]> {
   const cacheKey = `subject_materials_${subjectId}`;
-  const cached = cacheService.get<StudyMaterial[]>(cacheKey);
-  if (cached) return cached;
+  const cached =
+    cacheService.get<StudyMaterial[]>(cacheKey) ||
+    cacheService.get<StudyMaterial[]>(`public_materials_subject_${subjectId}`);
+  if (cached && cached.length > 0) return cached;
 
-  let materials: StudyMaterial[] = [];
+  // Derive from existing cached catalog if available
+  const catalog =
+    cacheService.get<StudyMaterial[]>('public_materials') ||
+    cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
+    cacheService.get<StudyMaterial[]>('public_materials_limit_100');
 
-  if (isFirebaseConfigured && database) {
-    try {
-      const pubRef = ref(database, 'publicMaterials');
-      const q = query(pubRef, orderByChild('subjectId'), equalTo(subjectId));
-      const snapshot = await get(q);
-
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        materials = Object.keys(data)
-          .map((id) => ({
-            ...data[id],
-            id,
-          }))
-          .filter((m) => m.published === true);
-        materials.sort(compareMaterialsAscending);
-      }
-    } catch (err) {
-      console.warn(`Notice fetching materials for subject ${subjectId} from RTDB:`, err);
+  if (catalog && catalog.length > 0) {
+    const filtered = catalog.filter((m) => m.subjectId === subjectId);
+    if (filtered.length > 0) {
+      cacheService.set(cacheKey, filtered, 180_000);
+      cacheService.set(`public_materials_subject_${subjectId}`, filtered, 180_000);
+      return filtered;
     }
   }
 
-  // Fallback to standard demo materials for subject
-  if (materials.length === 0) {
-    const demo = await loadDemoMaterials();
-    materials = demo.filter((m) => m.subjectId === subjectId && m.published === true);
-  }
+  const inFlightKey = `getPublicMaterialsBySubject_${subjectId}`;
+  const existing = inFlightMetadataRequests.get(inFlightKey);
+  if (existing) return existing;
 
-  cacheService.set(cacheKey, materials, 60_000);
-  return materials;
+  const fetchPromise = (async () => {
+    try {
+      let materials: StudyMaterial[] = [];
+
+      if (isFirebaseConfigured && database) {
+        try {
+          const pubRef = ref(database, 'publicMaterials');
+          const q = query(pubRef, orderByChild('subjectId'), equalTo(subjectId));
+          const snapshot = await get(q);
+
+          if (snapshot.exists()) {
+            const data = snapshot.val();
+            materials = Object.keys(data)
+              .map((id) => ({
+                ...data[id],
+                id,
+              }))
+              .filter((m) => m.published === true);
+            materials.sort(compareMaterialsAscending);
+          }
+        } catch (err) {
+          console.warn(`Notice fetching materials for subject ${subjectId} from RTDB:`, err);
+        }
+      }
+
+      // Fallback to standard demo materials for subject
+      if (materials.length === 0) {
+        const demo = await loadDemoMaterials();
+        materials = demo.filter((m) => m.subjectId === subjectId && m.published === true);
+      }
+
+      cacheService.set(cacheKey, materials, 120_000);
+      cacheService.set(`public_materials_subject_${subjectId}`, materials, 120_000);
+      return materials;
+    } finally {
+      inFlightMetadataRequests.delete(inFlightKey);
+    }
+  })();
+
+  inFlightMetadataRequests.set(inFlightKey, fetchPromise);
+  return fetchPromise;
 }
 
 // ==========================================
@@ -2043,10 +2164,15 @@ export function subscribeToPublicMaterials(
   let isSubscribed = true;
 
   // Stale-While-Revalidate: deliver fresh or session-cached data immediately (0 ms catalog paint)
-  const cached = cacheService.get<StudyMaterial[]>(cacheKey);
+  const cached =
+    cacheService.get<StudyMaterial[]>('public_materials') ||
+    cacheService.get<StudyMaterial[]>(cacheKey) ||
+    cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
+    cacheService.get<StudyMaterial[]>('public_materials_limit_100');
+
   if (cached && cached.length > 0) {
     try {
-      callback(cached);
+      callback(cached.slice(0, limit));
     } catch (e) {
       console.warn('Error in public materials cached callback:', e);
     }
@@ -2055,7 +2181,11 @@ export function subscribeToPublicMaterials(
   if (!isFirebaseConfigured || !database) {
     if (!cached || cached.length === 0) {
       loadDemoMaterials().then((demo) => {
-        if (isSubscribed) callback(demo.filter((m) => m.published === true).slice(0, limit));
+        const filtered = demo.filter((m) => m.published === true).slice(0, limit);
+        if (isSubscribed) {
+          indexMaterialsInCache(filtered);
+          callback(filtered);
+        }
       });
     }
     return () => {
@@ -2083,11 +2213,17 @@ export function subscribeToPublicMaterials(
       }
       if (materials.length === 0) {
         loadDemoMaterials().then((demo) => {
-          if (isSubscribed) callback(demo.filter((m) => m.published === true).slice(0, limit));
+          const filtered = demo.filter((m) => m.published === true).slice(0, limit);
+          if (isSubscribed) {
+            indexMaterialsInCache(filtered);
+            callback(filtered);
+          }
         });
         return;
       }
-      cacheService.set(cacheKey, materials, 60_000);
+      cacheService.set('public_materials', materials, 120_000);
+      cacheService.set(cacheKey, materials, 120_000);
+      indexMaterialsInCache(materials);
       callback(materials);
     },
     (error: Error) => {
@@ -2096,7 +2232,11 @@ export function subscribeToPublicMaterials(
       if (onError) onError(error);
       if (!cached || cached.length === 0) {
         loadDemoMaterials().then((demo) => {
-          if (isSubscribed) callback(demo.filter((m) => m.published === true).slice(0, limit));
+          const filtered = demo.filter((m) => m.published === true).slice(0, limit);
+          if (isSubscribed) {
+            indexMaterialsInCache(filtered);
+            callback(filtered);
+          }
         });
       }
     }
@@ -2120,7 +2260,9 @@ export function subscribeToSubjectMaterials(
   let isSubscribed = true;
 
   // Stale-While-Revalidate: deliver cached subject materials immediately
-  const cached = cacheService.get<StudyMaterial[]>(cacheKey);
+  const cached =
+    cacheService.get<StudyMaterial[]>(cacheKey) ||
+    cacheService.get<StudyMaterial[]>(`subject_materials_${subjectId}`);
   if (cached && cached.length > 0) {
     try {
       callback(cached);
@@ -2132,7 +2274,11 @@ export function subscribeToSubjectMaterials(
   if (!isFirebaseConfigured || !database) {
     if (!cached || cached.length === 0) {
       loadDemoMaterials().then((demo) => {
-        if (isSubscribed) callback(demo.filter((m) => m.subjectId === subjectId && m.published === true));
+        const filtered = demo.filter((m) => m.subjectId === subjectId && m.published === true);
+        if (isSubscribed) {
+          indexMaterialsInCache(filtered);
+          callback(filtered);
+        }
       });
     }
     return () => {
@@ -2160,11 +2306,17 @@ export function subscribeToSubjectMaterials(
       }
       if (materials.length === 0) {
         loadDemoMaterials().then((demo) => {
-          if (isSubscribed) callback(demo.filter((m) => m.subjectId === subjectId && m.published === true));
+          const filtered = demo.filter((m) => m.subjectId === subjectId && m.published === true);
+          if (isSubscribed) {
+            indexMaterialsInCache(filtered);
+            callback(filtered);
+          }
         });
         return;
       }
-      cacheService.set(cacheKey, materials, 60_000);
+      cacheService.set(cacheKey, materials, 120_000);
+      cacheService.set(`subject_materials_${subjectId}`, materials, 120_000);
+      indexMaterialsInCache(materials);
       callback(materials);
     },
     (error: Error) => {
@@ -2173,7 +2325,11 @@ export function subscribeToSubjectMaterials(
       if (onError) onError(error);
       if (!cached || cached.length === 0) {
         loadDemoMaterials().then((demo) => {
-          if (isSubscribed) callback(demo.filter((m) => m.subjectId === subjectId && m.published === true));
+          const filtered = demo.filter((m) => m.subjectId === subjectId && m.published === true);
+          if (isSubscribed) {
+            indexMaterialsInCache(filtered);
+            callback(filtered);
+          }
         });
       }
     }
