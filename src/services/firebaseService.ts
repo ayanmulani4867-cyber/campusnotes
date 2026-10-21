@@ -1799,9 +1799,8 @@ export async function setMaintenanceMode(enabled: boolean): Promise<void> {
 }
 
 export function subscribeToMaintenanceMode(callback: (isMaintenance: boolean) => void): () => void {
-  // Always default to false for public availability unless explicitly confirmed by database
-  callback(false);
   if (!isFirebaseConfigured || !database) {
+    callback(false);
     return () => {};
   }
   const settingRef = ref(database, 'settings/maintenanceMode');
