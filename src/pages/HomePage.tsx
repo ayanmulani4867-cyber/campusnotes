@@ -157,12 +157,21 @@ export const HomePage: React.FC = () => {
       <section className="w-full max-w-7xl mx-auto min-w-0 px-3.5 sm:px-6 lg:px-8 box-border">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <h2 className="text-base sm:text-lg font-bold text-slate-900">Filter by Category</h2>
-          <Link
-            to="/materials"
-            className="text-xs font-semibold text-blue-600 hover:text-blue-800"
-          >
-            All Materials &rarr;
-          </Link>
+          <div className="flex items-center gap-2.5">
+            <Link
+              to="/share-assignment"
+              className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-md border border-emerald-200/80 transition-colors"
+            >
+              <span>Share Assignment</span>
+              <span className="text-[10px] font-bold text-emerald-600 uppercase">WA</span>
+            </Link>
+            <Link
+              to="/materials"
+              className="text-xs font-semibold text-blue-600 hover:text-blue-800"
+            >
+              All Materials &rarr;
+            </Link>
+          </div>
         </div>
 
         {/* Straightforward Category Pills */}

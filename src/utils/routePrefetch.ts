@@ -7,7 +7,14 @@
 const prefetchedRoutes = new Set<string>();
 
 export function prefetchRoute(
-  routeName: 'materials' | 'materialDetail' | 'subjects' | 'subjectDetail' | 'category' | 'about'
+  routeName:
+    | 'materials'
+    | 'materialDetail'
+    | 'subjects'
+    | 'subjectDetail'
+    | 'category'
+    | 'about'
+    | 'shareAssignment'
 ): void {
   if (prefetchedRoutes.has(routeName)) return;
   prefetchedRoutes.add(routeName);
@@ -30,6 +37,9 @@ export function prefetchRoute(
       break;
     case 'about':
       import('../pages/AboutPage');
+      break;
+    case 'shareAssignment':
+      import('../pages/ShareAssignmentPage');
       break;
   }
 }

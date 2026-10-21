@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build && node scripts/copy-404.mjs",
     "lint": "oxlint",
-    "test": "node scripts/test-full-card-and-perf.mjs && node scripts/test-metadata-share.mjs && node scripts/test-mobile-and-share.mjs && node scripts/test-maintenance-guard-and-no-flash.mjs",
+    "test": "node scripts/test-full-card-and-perf.mjs && node scripts/test-metadata-share.mjs && node scripts/test-mobile-and-share.mjs && node scripts/test-maintenance-guard-and-no-flash.mjs && node scripts/test-share-assignment.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
