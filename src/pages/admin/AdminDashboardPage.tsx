@@ -77,7 +77,6 @@ export const AdminDashboardPage: React.FC = () => {
   const [materials, setMaterials] = useState<StudyMaterial[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [semesters, setSemesters] = useState<Semester[]>([]);
-  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Maintenance mode state
@@ -219,8 +218,10 @@ export const AdminDashboardPage: React.FC = () => {
     refreshData();
   }, []);
 
-  // Compute stats
-  useEffect(() => {
+  // Compute stats synchronously without cascading re-renders
+  const stats = useMemo<DashboardStats | null>(() => {
+    if (loading && materials.length === 0 && subjects.length === 0) return null;
+
     const categoryCounts: Record<AcademicCategory, number> = {
       notes: 0,
       assignments: 0,
@@ -234,7 +235,7 @@ export const AdminDashboardPage: React.FC = () => {
     let publishedCount = 0;
     let unpublishedCount = 0;
 
-    materials.forEach((m) => {
+    for (const m of materials) {
       if (m.published) {
         publishedCount++;
       } else {
@@ -243,16 +244,16 @@ export const AdminDashboardPage: React.FC = () => {
       if (m.category && categoryCounts[m.category] !== undefined) {
         categoryCounts[m.category]++;
       }
-    });
+    }
 
-    setStats({
+    return {
       totalMaterials: materials.length,
       publishedCount,
       unpublishedCount,
       totalSubjects: subjects.length,
       categoryCounts,
-    });
-  }, [materials, subjects]);
+    };
+  }, [materials, subjects, loading]);
 
   const handleTogglePublish = async (material: StudyMaterial) => {
     try {

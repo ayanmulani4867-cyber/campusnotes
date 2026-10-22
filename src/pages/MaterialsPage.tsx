@@ -112,6 +112,16 @@ export const MaterialsPage: React.FC = () => {
     setSearchParams({}, { replace: true });
   };
 
+  // Auto-reset subjectId filter if the selected subject was in an inactive semester
+  useEffect(() => {
+    if (filters.subjectId && subjects.length > 0) {
+      const exists = subjects.some((s) => s.id === filters.subjectId);
+      if (!exists) {
+        handleFilterChange({ subjectId: '' });
+      }
+    }
+  }, [subjects, filters.subjectId]);
+
   // Filter and sort items efficiently
   const filteredMaterials = useMemo(() => {
     const q = filters.searchQuery.trim().toLowerCase();
@@ -120,6 +130,10 @@ export const MaterialsPage: React.FC = () => {
       .filter((m) => {
         // Only published items
         if (!m.published) return false;
+
+        // Hide materials whose subject belongs to an inactive semester
+        const subject = subjects.find((s) => s.id === m.subjectId);
+        if (!subject) return false;
 
         // Subject filter
         if (filters.subjectId && m.subjectId !== filters.subjectId) {
@@ -145,8 +159,6 @@ export const MaterialsPage: React.FC = () => {
             m.unitNumber !== undefined && m.unitNumber !== null
               ? `unit ${m.unitNumber}`.includes(q)
               : false;
-
-          const subject = subjects.find((s) => s.id === m.subjectId);
           const matchSubject = subject
             ? subject.name.toLowerCase().includes(q) || subject.code.toLowerCase().includes(q)
             : false;

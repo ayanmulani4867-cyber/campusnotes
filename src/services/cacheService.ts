@@ -92,6 +92,13 @@ class CacheService {
   }
 
   /**
+   * Invalidate all keys matching a prefix (alias to invalidate)
+   */
+  invalidatePrefix(prefix: string): void {
+    this.invalidate(prefix);
+  }
+
+  /**
    * Clear all cached items
    */
   clearAll(): void {

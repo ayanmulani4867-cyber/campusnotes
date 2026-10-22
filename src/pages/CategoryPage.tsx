@@ -87,19 +87,33 @@ export const CategoryPage: React.FC = () => {
     loadCategoryData();
   }, [categorySlug]);
 
+  // Auto-reset selectedSubjectId if the selected subject was in an inactive semester
+  useEffect(() => {
+    if (selectedSubjectId && subjects.length > 0) {
+      const exists = subjects.some((s) => s.id === selectedSubjectId);
+      if (!exists) {
+        setSelectedSubjectId('');
+      }
+    }
+  }, [subjects, selectedSubjectId]);
+
   const filteredMaterials = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
 
     const filtered = materials.filter((m) => {
       if (!m.published) return false;
       if (m.category !== categorySlug) return false;
+
+      // Hide materials whose subject belongs to an inactive semester
+      const sub = subjects.find((s) => s.id === m.subjectId);
+      if (!sub) return false;
+
       if (selectedSubjectId && m.subjectId !== selectedSubjectId) return false;
 
       if (q) {
         const matchTitle = m.title.toLowerCase().includes(q);
         const matchDesc = (m.description || '').toLowerCase().includes(q);
         const matchTags = m.tags ? m.tags.some((t) => t.toLowerCase().includes(q)) : false;
-        const sub = subjects.find((s) => s.id === m.subjectId);
         const matchSub = sub
           ? sub.name.toLowerCase().includes(q) || sub.code.toLowerCase().includes(q)
           : false;

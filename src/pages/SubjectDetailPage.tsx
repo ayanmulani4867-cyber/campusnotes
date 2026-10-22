@@ -15,8 +15,13 @@ import { Subject, StudyMaterial, CATEGORIES, AcademicCategory } from '../types';
 import { OFFICIAL_CSE_SEM_5_SUBJECTS } from '../constants/subjects';
 import {
   subscribeToPublicSubjects,
+  subscribeToPublicSemesters,
   subscribeToSubjectMaterials,
+  getPublicSemesters,
+  isSubjectSemesterActive,
+  getSubjectForPublicRoute,
 } from '../services/firebaseService';
+import { Semester } from '../types';
 import { MaterialCard } from '../components/materials/MaterialCard';
 import { MaterialCardSkeleton } from '../components/common/Skeleton';
 import { EmptyState } from '../components/common/EmptyState';
@@ -78,6 +83,9 @@ export const SubjectDetailPage: React.FC = () => {
     return true;
   });
 
+  const [semesterUnavailable, setSemesterUnavailable] = useState(false);
+  const [semesterName, setSemesterName] = useState('');
+
   // Filters within subject
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -85,11 +93,41 @@ export const SubjectDetailPage: React.FC = () => {
   useEffect(() => {
     if (!subjectId) return;
     let isMounted = true;
+    let activeSemesters: Semester[] = [];
+    let currentSubjectRecord: Subject | null = null;
+    let unsubMatsCleanup: (() => void) | null = null;
 
     const rawId = decodeURIComponent(subjectId).trim();
     const normalized = rawId.toLowerCase();
 
-    // 1. Instant matching from static curriculum to guarantee ZERO latency on mobile
+    const verifySemesterActive = (sub: Subject, sems: Semester[]) => {
+      if (!isMounted) return;
+      const isSemActive = isSubjectSemesterActive(sub, sems);
+      if (!isSemActive) {
+        setSemesterUnavailable(true);
+        const semNum = sub.semesterNumber ?? 5;
+        setSemesterName(`Semester ${semNum}`);
+        setMaterials([]);
+        setMaterialsLoading(false);
+        if (unsubMatsCleanup) {
+          unsubMatsCleanup();
+          unsubMatsCleanup = null;
+        }
+      } else {
+        setSemesterUnavailable(false);
+      }
+    };
+
+    // 1. Subscribe to public semesters in real time
+    const unsubSems = subscribeToPublicSemesters((sems) => {
+      if (!isMounted) return;
+      activeSemesters = sems;
+      if (currentSubjectRecord) {
+        verifySemesterActive(currentSubjectRecord, sems);
+      }
+    });
+
+    // 2. Instant matching from static curriculum
     const instantMatch = OFFICIAL_CSE_SEM_5_SUBJECTS.find(
       (s) =>
         s.id.toLowerCase() === normalized ||
@@ -97,45 +135,73 @@ export const SubjectDetailPage: React.FC = () => {
         s.name.toLowerCase() === normalized
     );
 
-    if (instantMatch) {
-      setSubject({
-        ...instantMatch,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      });
+    const fullInstantMatch: Subject | null = instantMatch
+      ? {
+          ...instantMatch,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        }
+      : null;
+
+    if (fullInstantMatch) {
+      currentSubjectRecord = fullInstantMatch;
+      setSubject(fullInstantMatch);
       setSubjectLoading(false);
+      if (activeSemesters.length > 0) {
+        verifySemesterActive(fullInstantMatch, activeSemesters);
+      }
     }
 
     const canonicalId = instantMatch ? instantMatch.id : rawId;
 
-    // 2. Real-time subscription to subjects
+    // 3. Fallback targeted lookup in case subject's semester is inactive (so subscribeToPublicSubjects omitted it)
+    getSubjectForPublicRoute(normalized).then((found) => {
+      if (!isMounted) return;
+      if (found) {
+        currentSubjectRecord = found;
+        setSubject(found);
+        setSubjectLoading(false);
+        if (activeSemesters.length > 0) {
+          verifySemesterActive(found, activeSemesters);
+        }
+      } else if (!instantMatch) {
+        setSubject(null);
+        setSubjectLoading(false);
+      }
+    }).catch(() => {});
+
+    // 4. Real-time subscription to subjects
     const unsubSubs = subscribeToPublicSubjects(
       (subs) => {
         if (!isMounted) return;
-        const currentSubject =
+        const rawMatch =
           subs.find(
             (s) =>
               s.id.toLowerCase() === normalized ||
               s.code.toLowerCase() === normalized ||
               s.name.toLowerCase() === normalized
           ) ||
-          instantMatch ||
+          fullInstantMatch ||
+          currentSubjectRecord ||
           null;
 
-        if (currentSubject) {
-          setSubject({
-            ...currentSubject,
+        if (rawMatch) {
+          const currentSubject: Subject = {
+            ...rawMatch,
             createdAt:
-              'createdAt' in currentSubject && typeof currentSubject.createdAt === 'number'
-                ? currentSubject.createdAt
+              'createdAt' in rawMatch && typeof rawMatch.createdAt === 'number'
+                ? rawMatch.createdAt
                 : Date.now(),
             updatedAt:
-              'updatedAt' in currentSubject && typeof currentSubject.updatedAt === 'number'
-                ? currentSubject.updatedAt
+              'updatedAt' in rawMatch && typeof rawMatch.updatedAt === 'number'
+                ? rawMatch.updatedAt
                 : Date.now(),
-          });
-        } else {
-          setSubject(null);
+          };
+          currentSubjectRecord = currentSubject;
+          setSubject(currentSubject);
+          if (activeSemesters.length > 0) {
+            verifySemesterActive(currentSubject, activeSemesters);
+          }
         }
         setSubjectLoading(false);
       },
@@ -145,12 +211,14 @@ export const SubjectDetailPage: React.FC = () => {
       }
     );
 
-    // 3. Real-time subscription to materials for this subject
-    const unsubMats = subscribeToSubjectMaterials(
+    // 5. Real-time subscription to materials for this subject (only if not unavailable)
+    unsubMatsCleanup = subscribeToSubjectMaterials(
       canonicalId,
       (mats) => {
         if (!isMounted) return;
-        setMaterials(mats);
+        if (!semesterUnavailable) {
+          setMaterials(mats);
+        }
         setMaterialsLoading(false);
       },
       (err) => {
@@ -161,12 +229,14 @@ export const SubjectDetailPage: React.FC = () => {
 
     return () => {
       isMounted = false;
+      unsubSems();
       unsubSubs();
-      unsubMats();
+      if (unsubMatsCleanup) unsubMatsCleanup();
     };
-  }, [subjectId]);
+  }, [subjectId, semesterUnavailable]);
 
   const filteredMaterials = useMemo(() => {
+    if (semesterUnavailable) return [];
     const q = searchQuery.trim().toLowerCase();
     const filtered = materials.filter((m) => {
       if (!m.published) return false;
@@ -184,9 +254,23 @@ export const SubjectDetailPage: React.FC = () => {
       return true;
     });
     return sortStudyMaterialsAscending(filtered);
-  }, [materials, selectedCategory, searchQuery]);
+  }, [materials, selectedCategory, searchQuery, semesterUnavailable]);
 
   const activeCategoryMeta = CATEGORIES.find((c) => c.id === selectedCategory);
+
+  if (!subjectLoading && semesterUnavailable) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-12 sm:py-16 text-center">
+        <EmptyState
+          icon="folder"
+          title="This semester is currently unavailable."
+          description={`The curriculum and study materials for ${semesterName || 'this semester'} are currently deactivated or undergoing review. Please check back later or explore other active semesters.`}
+          actionText="Return to All Subjects"
+          actionTo="/subjects"
+        />
+      </div>
+    );
+  }
 
   if (!subjectLoading && !subject) {
     return (
@@ -194,7 +278,7 @@ export const SubjectDetailPage: React.FC = () => {
         <EmptyState
           icon="folder"
           title="Subject Not Found"
-          description="The requested CSE Semester 5 subject does not exist or may have been deactivated."
+          description="The requested subject does not exist or may have been removed."
           actionText="Return to All Subjects"
           actionTo="/subjects"
         />

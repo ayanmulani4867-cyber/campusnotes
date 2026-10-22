@@ -11,6 +11,7 @@ import {
   subscribeToPublicSubjects,
   subscribeToPublicSemesters,
   DEFAULT_INITIAL_SEMESTERS,
+  isSubjectSemesterActive,
 } from '../services/firebaseService';
 import { sortStudyMaterialsAscending } from '../utils/materialSorting';
 import { MaterialCard } from '../components/materials/MaterialCard';
@@ -108,19 +109,27 @@ export const HomePage: React.FC = () => {
     }
   };
 
-  const filteredMaterials = useMemo(() => {
-    const list =
-      selectedCategory === 'all'
-        ? materials
-        : materials.filter((m) => m.category === selectedCategory);
-    return sortStudyMaterialsAscending(list).slice(0, 12);
-  }, [materials, selectedCategory]);
+  // Auto-reset selected semester if it was deactivated by an admin
+  useEffect(() => {
+    if (selectedSemesterId !== 'all' && semesters.length > 0) {
+      const exists = semesters.some((s) => s.id === selectedSemesterId);
+      if (!exists) {
+        setSelectedSemesterId('all');
+      }
+    }
+  }, [semesters, selectedSemesterId]);
+
+  // All subjects across active semesters
+  const allActiveSubjects = useMemo(() => {
+    return subjects.filter(
+      (s) => s.active !== false && isSubjectSemesterActive(s, semesters)
+    );
+  }, [subjects, semesters]);
 
   const filteredSubjects = useMemo(() => {
-    const active = subjects.filter((s) => s.active !== false);
-    if (selectedSemesterId === 'all') return active;
+    if (selectedSemesterId === 'all') return allActiveSubjects;
 
-    return active.filter((s) => {
+    return allActiveSubjects.filter((s) => {
       // 1. Exact semesterId match
       if (s.semesterId && s.semesterId === selectedSemesterId) {
         return true;
@@ -139,7 +148,17 @@ export const HomePage: React.FC = () => {
       }
       return false;
     });
-  }, [subjects, selectedSemesterId, semesters]);
+  }, [allActiveSubjects, selectedSemesterId, semesters]);
+
+  const filteredMaterials = useMemo(() => {
+    const activeSubjectIds = new Set(allActiveSubjects.map((s) => s.id));
+    const valid = materials.filter((m) => activeSubjectIds.has(m.subjectId));
+    const list =
+      selectedCategory === 'all'
+        ? valid
+        : valid.filter((m) => m.category === selectedCategory);
+    return sortStudyMaterialsAscending(list).slice(0, 12);
+  }, [materials, selectedCategory, allActiveSubjects]);
 
   const selectedSemesterObj = semesters.find((s) => s.id === selectedSemesterId);
 

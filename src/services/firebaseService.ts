@@ -441,10 +441,17 @@ export async function getPublicSubjects(): Promise<Subject[]> {
         }));
       }
 
-      // Filter out any excluded subjects and prevent duplicates
+      // Filter out any excluded subjects, inactive subjects, AND subjects whose semester is inactive
       const sanitized = sanitizeSubjects(subjectsList);
+      let activeSemesters: Semester[] = [];
+      try {
+        activeSemesters = await getPublicSemesters();
+      } catch {
+        activeSemesters = DEFAULT_INITIAL_SEMESTERS.filter((s) => s.active !== false);
+      }
+
       const activeSubjects = sanitized
-        .filter((s) => s.active !== false)
+        .filter((s) => s.active !== false && isSubjectSemesterActive(s, activeSemesters))
         .sort((a, b) => a.code.localeCompare(b.code));
 
       cacheService.set(cacheKey, activeSubjects, 180_000); // 3 minutes cache
@@ -456,6 +463,64 @@ export async function getPublicSubjects(): Promise<Subject[]> {
 
   inFlightMetadataRequests.set(inFlightKey, fetchPromise);
   return fetchPromise;
+}
+
+/**
+ * Fast targeted lookup for a subject on public routes.
+ * Checks instant in-memory curriculum and public cache first (0 ms),
+ * then falls back to a targeted single-record read /subjects/{id}.
+ * Does NOT download the full subjects database collection.
+ */
+export async function getSubjectForPublicRoute(subjectIdOrCode: string): Promise<Subject | null> {
+  const norm = subjectIdOrCode.trim().toLowerCase();
+
+  // 1. Static official list instant match
+  const staticMatch = OFFICIAL_CSE_SEM_5_SUBJECTS.find(
+    (s) =>
+      s.id.toLowerCase() === norm ||
+      s.code.toLowerCase() === norm ||
+      s.name.toLowerCase() === norm
+  );
+  if (staticMatch) {
+    const now = Date.now();
+    return {
+      ...staticMatch,
+      semesterId: 'sem_5',
+      semesterNumber: 5,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  // 2. Public cached subjects
+  const cached = cacheService.get<Subject[]>('public_subjects');
+  if (cached && cached.length > 0) {
+    const found = cached.find(
+      (s) =>
+        s.id.toLowerCase() === norm ||
+        s.code.toLowerCase() === norm ||
+        s.name.toLowerCase() === norm
+    );
+    if (found) return found;
+  }
+
+  // 3. Targeted single-node read from RTDB
+  if (isFirebaseConfigured && database) {
+    try {
+      const snap = await get(ref(database, `subjects/${subjectIdOrCode.trim()}`));
+      if (snap.exists()) {
+        const data = snap.val();
+        return {
+          ...data,
+          id: subjectIdOrCode.trim(),
+          semesterId: data.semesterId || 'sem_5',
+          semesterNumber: typeof data.semesterNumber === 'number' ? data.semesterNumber : 5,
+        };
+      }
+    } catch {}
+  }
+
+  return null;
 }
 
 /**
@@ -589,6 +654,20 @@ export async function getPublicMaterialById(id: string): Promise<StudyMaterial |
  * Reuses catalog cache when available for zero-latency subject navigation.
  */
 export async function getPublicMaterialsBySubject(subjectId: string): Promise<StudyMaterial[]> {
+  // Hide materials immediately if the subject's semester is currently inactive
+  try {
+    const activeSemesters = await getPublicSemesters();
+    const allSubs = await getAllSubjectsAdmin();
+    const targetSub = allSubs.find(
+      (s) => s.id === subjectId || s.code.toLowerCase() === subjectId.toLowerCase()
+    );
+    if (targetSub && !isSubjectSemesterActive(targetSub, activeSemesters)) {
+      return [];
+    }
+  } catch {
+    // Proceed if check fails
+  }
+
   const cacheKey = `subject_materials_${subjectId}`;
   const cached =
     cacheService.get<StudyMaterial[]>(cacheKey) ||
@@ -616,6 +695,7 @@ export async function getPublicMaterialsBySubject(subjectId: string): Promise<St
 
   const fetchPromise = (async () => {
     try {
+
       let materials: StudyMaterial[] = [];
 
       if (isFirebaseConfigured && database) {
@@ -1388,6 +1468,37 @@ export const DEFAULT_INITIAL_SEMESTERS: Semester[] = [
 
 export const LOCAL_SEMESTERS_STORAGE_KEY = 'cn_local_semesters';
 
+/**
+ * Evaluates whether a subject belongs to an active semester.
+ * Handles semesterId match, semesterNumber match, and legacy fallback for Semester 5.
+ */
+export function isSubjectSemesterActive(
+  subject: Subject,
+  activeSemesters: Semester[]
+): boolean {
+  if (!activeSemesters || activeSemesters.length === 0) return false;
+
+  // 1. Direct semesterId match
+  if (subject.semesterId) {
+    const sem = activeSemesters.find((s) => s.id === subject.semesterId);
+    if (sem) return sem.active !== false;
+  }
+
+  // 2. Direct semesterNumber match
+  if (typeof subject.semesterNumber === 'number') {
+    const sem = activeSemesters.find((s) => s.number === subject.semesterNumber);
+    if (sem) return sem.active !== false;
+  }
+
+  // 3. Backward compatibility: if no semesterId and no semesterNumber, defaults to Semester 5
+  if (!subject.semesterId && (subject.semesterNumber === undefined || subject.semesterNumber === null)) {
+    const sem5 = activeSemesters.find((s) => s.id === 'sem_5' || s.number === 5);
+    return Boolean(sem5 && sem5.active !== false);
+  }
+
+  return false;
+}
+
 export interface SaveSemesterResult {
   cloudSynced: boolean;
   localOnly?: boolean;
@@ -1535,47 +1646,60 @@ export async function getPublicSemesters(): Promise<Semester[]> {
   const cached = cacheService.get<Semester[]>(cacheKey);
   if (cached && cached.length > 0) return cached;
 
-  const deletedIds = getDeletedSemesterIds();
-  const map = new Map<string, Semester>();
-  for (const s of DEFAULT_INITIAL_SEMESTERS) {
-    if (!deletedIds.has(s.id)) {
-      map.set(s.id, s);
-    }
-  }
+  const inFlightKey = 'getPublicSemesters';
+  const existing = inFlightMetadataRequests.get(inFlightKey);
+  if (existing) return existing;
 
-  for (const s of getLocalSemesters()) {
-    if (!deletedIds.has(s.id)) {
-      map.set(s.id, s);
-    }
-  }
-
-  if (isFirebaseConfigured && database) {
+  const fetchPromise = (async () => {
     try {
-      const semestersRef = ref(database, 'semesters');
-      const snapshot = await get(semestersRef);
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        for (const [id, item] of Object.entries(data as Record<string, any>)) {
-          if (!deletedIds.has(id)) {
-            map.set(id, {
-              ...item,
-              id,
-              number: Number(item.number) || 5,
-            });
-          }
+      const deletedIds = getDeletedSemesterIds();
+      const map = new Map<string, Semester>();
+      for (const s of DEFAULT_INITIAL_SEMESTERS) {
+        if (!deletedIds.has(s.id)) {
+          map.set(s.id, s);
         }
       }
-    } catch (err: unknown) {
-      console.warn('Notice reading public semesters from RTDB:', err);
+
+      for (const s of getLocalSemesters()) {
+        if (!deletedIds.has(s.id)) {
+          map.set(s.id, s);
+        }
+      }
+
+      if (isFirebaseConfigured && database) {
+        try {
+          const semestersRef = ref(database, 'semesters');
+          const snapshot = await get(semestersRef);
+          if (snapshot.exists()) {
+            const data = snapshot.val();
+            for (const [id, item] of Object.entries(data as Record<string, any>)) {
+              if (!deletedIds.has(id)) {
+                map.set(id, {
+                  ...item,
+                  id,
+                  number: Number(item.number) || 5,
+                });
+              }
+            }
+          }
+        } catch (err: unknown) {
+          console.warn('Notice reading public semesters from RTDB:', err);
+        }
+      }
+
+      const activeSemesters = Array.from(map.values())
+        .filter((s) => s.active !== false)
+        .sort((a, b) => a.number - b.number);
+
+      cacheService.set(cacheKey, activeSemesters, 180_000);
+      return activeSemesters;
+    } finally {
+      inFlightMetadataRequests.delete(inFlightKey);
     }
-  }
+  })();
 
-  const activeSemesters = Array.from(map.values())
-    .filter((s) => s.active !== false)
-    .sort((a, b) => a.number - b.number);
-
-  cacheService.set(cacheKey, activeSemesters, 180_000);
-  return activeSemesters;
+  inFlightMetadataRequests.set(inFlightKey, fetchPromise);
+  return fetchPromise;
 }
 
 /**
@@ -1706,6 +1830,11 @@ export async function saveSemester(
   unmarkSemesterDeleted(savedSemester.id);
   saveLocalSemester(savedSemester);
   cacheService.invalidate('public_semesters');
+  cacheService.invalidate('public_subjects');
+  cacheService.invalidatePrefix('public_materials');
+  cacheService.invalidatePrefix('subject_materials_');
+  sharedSemestersState.latestData = null;
+  sharedSubjectsState.latestData = null;
 
   return { cloudSynced, localOnly: !cloudSynced };
 }
@@ -1761,6 +1890,11 @@ export async function deleteSemester(semesterId: string): Promise<void> {
   }
 
   cacheService.invalidate('public_semesters');
+  cacheService.invalidate('public_subjects');
+  cacheService.invalidatePrefix('public_materials');
+  cacheService.invalidatePrefix('subject_materials_');
+  sharedSemestersState.latestData = null;
+  sharedSubjectsState.latestData = null;
 }
 
 // ==========================================
@@ -2667,15 +2801,38 @@ function getSanitizedDefaultSubjects(): Subject[] {
 
 export type Unsubscribe = () => void;
 
+// ==========================================
+// REAL-TIME SUBSCRIPTION MULTIPLEXERS
+// ==========================================
+
+interface SharedSubscriptionState<T> {
+  subscribers: Set<(data: T) => void>;
+  latestData: T | null;
+  cleanup: (() => void) | null;
+}
+
+const sharedSemestersState: SharedSubscriptionState<Semester[]> = {
+  subscribers: new Set(),
+  latestData: null,
+  cleanup: null,
+};
+
+const sharedSubjectsState: SharedSubscriptionState<Subject[]> = {
+  subscribers: new Set(),
+  latestData: null,
+  cleanup: null,
+};
+
+const sharedMaterialsLimitMap = new Map<number, SharedSubscriptionState<StudyMaterial[]>>();
+
 /**
- * Real-time subscription to active public semesters
+ * Real-time subscription to active public semesters (Multiplexed single-listener with ref counting)
  */
 export function subscribeToPublicSemesters(
   callback: (semesters: Semester[]) => void,
   onError?: (err: Error) => void
 ): Unsubscribe {
   const cacheKey = 'public_semesters';
-  let isSubscribed = true;
 
   const getMergedActive = (cloudList: Semester[] = []) => {
     const deletedIds = getDeletedSemesterIds();
@@ -2694,61 +2851,91 @@ export function subscribeToPublicSemesters(
       .sort((a, b) => a.number - b.number);
   };
 
-  const initial = getMergedActive();
-  callback(initial);
-
-  const handleLocalChange = () => {
-    if (!isSubscribed) return;
-    const active = getMergedActive();
-    cacheService.set(cacheKey, active, 180_000);
-    callback(active);
-  };
-
-  if (typeof window !== 'undefined') {
-    window.addEventListener('cn_semesters_changed', handleLocalChange);
+  // 1. Immediate Delivery from memory / cache
+  if (sharedSemestersState.latestData && sharedSemestersState.latestData.length > 0) {
+    try {
+      callback(sharedSemestersState.latestData);
+    } catch {}
+  } else {
+    const cached = cacheService.get<Semester[]>(cacheKey);
+    if (cached && cached.length > 0) {
+      try {
+        callback(cached);
+      } catch {}
+    } else {
+      callback(getMergedActive());
+    }
   }
 
-  if (!isFirebaseConfigured || !database) {
-    return () => {
-      isSubscribed = false;
+  // 2. Register subscriber
+  sharedSemestersState.subscribers.add(callback);
+
+  // 3. Setup single shared underlying RTDB listener if not already active
+  if (!sharedSemestersState.cleanup) {
+    let cloudList: Semester[] = [];
+
+    const broadcast = () => {
+      const activeSemesters = getMergedActive(cloudList);
+      sharedSemestersState.latestData = activeSemesters;
+      cacheService.set(cacheKey, activeSemesters, 180_000);
+      for (const sub of sharedSemestersState.subscribers) {
+        try {
+          sub(activeSemesters);
+        } catch (e) {
+          console.warn('Error in public semesters subscriber callback:', e);
+        }
+      }
+    };
+
+    const handleLocalChange = () => {
+      broadcast();
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('cn_semesters_changed', handleLocalChange);
+    }
+
+    let unsubDb: (() => void) | null = null;
+    if (isFirebaseConfigured && database) {
+      const semestersRef = ref(database, 'semesters');
+      unsubDb = onValue(
+        semestersRef,
+        (snapshot: RtdbSnapshot) => {
+          let list: Semester[] = [];
+          if (snapshot.exists()) {
+            const data = snapshot.val();
+            list = Object.keys(data).map((id) => ({
+              ...data[id],
+              id,
+              number: Number(data[id].number) || 5,
+            }));
+          }
+          cloudList = list;
+          broadcast();
+        },
+        (error: Error) => {
+          console.warn('Realtime public semesters listener warning:', error);
+          if (onError) onError(error);
+          broadcast();
+        }
+      );
+    }
+
+    sharedSemestersState.cleanup = () => {
       if (typeof window !== 'undefined') {
         window.removeEventListener('cn_semesters_changed', handleLocalChange);
       }
+      if (unsubDb) unsubDb();
     };
   }
 
-  const semestersRef = ref(database, 'semesters');
-  const unsubscribe = onValue(
-    semestersRef,
-    (snapshot: RtdbSnapshot) => {
-      if (!isSubscribed) return;
-      let list: Semester[] = [];
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        list = Object.keys(data).map((id) => ({
-          ...data[id],
-          id,
-          number: Number(data[id].number) || 5,
-        }));
-      }
-      const activeSemesters = getMergedActive(list);
-      cacheService.set(cacheKey, activeSemesters, 180_000);
-      callback(activeSemesters);
-    },
-    (error: Error) => {
-      if (!isSubscribed) return;
-      console.warn('Realtime public semesters listener warning:', error);
-      if (onError) onError(error);
-      callback(getMergedActive());
-    }
-  );
-
+  // 4. Return reference-counted unsubscribe
   return () => {
-    isSubscribed = false;
-    if (typeof window !== 'undefined') {
-      window.removeEventListener('cn_semesters_changed', handleLocalChange);
+    sharedSemestersState.subscribers.delete(callback);
+    if (sharedSemestersState.subscribers.size === 0 && sharedSemestersState.cleanup) {
+      sharedSemestersState.cleanup();
+      sharedSemestersState.cleanup = null;
     }
-    unsubscribe();
   };
 }
 
@@ -2830,72 +3017,105 @@ export function subscribeToSemestersAdmin(
 }
 
 /**
- * Subscribe in real time to active public subjects
+ * Subscribe in real time to active public subjects (Multiplexed single-listener with ref counting)
  */
 export function subscribeToPublicSubjects(
   callback: (subjects: Subject[]) => void,
   onError?: (err: Error) => void
 ): Unsubscribe {
   const cacheKey = 'public_subjects';
-  let isSubscribed = true;
 
-  // Stale-While-Revalidate: deliver valid cached subjects immediately (0 ms catalog paint)
-  const cached = cacheService.get<Subject[]>(cacheKey);
-  if (cached && cached.length > 0) {
+  // 1. Immediate Delivery from memory / cache
+  if (sharedSubjectsState.latestData && sharedSubjectsState.latestData.length > 0) {
     try {
-      callback(cached);
-    } catch (e) {
-      console.warn('Error in public subjects cached callback:', e);
+      callback(sharedSubjectsState.latestData);
+    } catch {}
+  } else {
+    const cached = cacheService.get<Subject[]>(cacheKey);
+    if (cached && cached.length > 0) {
+      try {
+        callback(cached);
+      } catch {}
+    } else {
+      callback(getSanitizedDefaultSubjects());
     }
   }
 
-  if (!isFirebaseConfigured || !database) {
-    if (!cached || cached.length === 0) {
-      callback(getSanitizedDefaultSubjects());
+  // 2. Register subscriber
+  sharedSubjectsState.subscribers.add(callback);
+
+  // 3. Setup single shared underlying listener if not already active
+  if (!sharedSubjectsState.cleanup) {
+    let currentRawSubjects: Subject[] = getSanitizedDefaultSubjects();
+    let currentActiveSemesters: Semester[] = DEFAULT_INITIAL_SEMESTERS.filter((s) => s.active !== false);
+
+    const emit = () => {
+      const sanitized = sanitizeSubjects(currentRawSubjects)
+        .filter((s) => s.active !== false && isSubjectSemesterActive(s, currentActiveSemesters))
+        .sort((a, b) => a.code.localeCompare(b.code));
+
+      sharedSubjectsState.latestData = sanitized;
+      cacheService.set(cacheKey, sanitized, 180_000);
+      for (const sub of sharedSubjectsState.subscribers) {
+        try {
+          sub(sanitized);
+        } catch (e) {
+          console.warn('Error in public subjects subscriber callback:', e);
+        }
+      }
+    };
+
+    // Shared subscription to active semesters so semester status toggles trigger immediate re-filtering
+    const unsubSemesters = subscribeToPublicSemesters((activeSems) => {
+      currentActiveSemesters = activeSems;
+      emit();
+    });
+
+    let unsubSubjects: (() => void) | null = null;
+    if (isFirebaseConfigured && database) {
+      const subjectsRef = ref(database, 'subjects');
+      unsubSubjects = onValue(
+        subjectsRef,
+        (snapshot: RtdbSnapshot) => {
+          let list: Subject[] = [];
+          if (snapshot.exists()) {
+            const data = snapshot.val();
+            list = Object.keys(data).map((id) => ({
+              ...data[id],
+              id,
+              semesterId: data[id].semesterId || 'sem_5',
+              semesterNumber: typeof data[id].semesterNumber === 'number' ? data[id].semesterNumber : 5,
+            }));
+          }
+          if (list.length === 0) {
+            list = getSanitizedDefaultSubjects();
+          }
+          currentRawSubjects = list;
+          emit();
+        },
+        (error: Error) => {
+          console.warn('Realtime public subjects listener warning:', error);
+          if (onError) onError(error);
+          emit();
+        }
+      );
+    } else {
+      emit();
     }
-    return () => {
-      isSubscribed = false;
+
+    sharedSubjectsState.cleanup = () => {
+      unsubSemesters();
+      if (unsubSubjects) unsubSubjects();
     };
   }
 
-  const subjectsRef = ref(database, 'subjects');
-  const unsubscribe = onValue(
-    subjectsRef,
-    (snapshot: RtdbSnapshot) => {
-      if (!isSubscribed) return;
-      let list: Subject[] = [];
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        list = Object.keys(data).map((id) => ({
-          ...data[id],
-          id,
-          semesterId: data[id].semesterId || 'sem_5',
-          semesterNumber: typeof data[id].semesterNumber === 'number' ? data[id].semesterNumber : 5,
-        }));
-      }
-      if (list.length === 0) {
-        list = getSanitizedDefaultSubjects();
-      }
-      const sanitized = sanitizeSubjects(list)
-        .filter((s) => s.active !== false)
-        .sort((a, b) => a.code.localeCompare(b.code));
-
-      cacheService.set(cacheKey, sanitized, 180_000);
-      callback(sanitized);
-    },
-    (error: Error) => {
-      if (!isSubscribed) return;
-      console.warn('Realtime public subjects listener warning:', error);
-      if (onError) onError(error);
-      if (!cached || cached.length === 0) {
-        callback(getSanitizedDefaultSubjects());
-      }
-    }
-  );
-
+  // 4. Return reference-counted unsubscribe
   return () => {
-    isSubscribed = false;
-    unsubscribe();
+    sharedSubjectsState.subscribers.delete(callback);
+    if (sharedSubjectsState.subscribers.size === 0 && sharedSubjectsState.cleanup) {
+      sharedSubjectsState.cleanup();
+      sharedSubjectsState.cleanup = null;
+    }
   };
 }
 
@@ -2926,7 +3146,7 @@ export async function seedInitialDemoMaterials(): Promise<{ added: number }> {
 }
 
 /**
- * Subscribe in real time to published public materials
+ * Subscribe in real time to published public materials (Multiplexed single-listener with ref counting)
  */
 export function subscribeToPublicMaterials(
   callback: (materials: StudyMaterial[]) => void,
@@ -2934,90 +3154,115 @@ export function subscribeToPublicMaterials(
   onError?: (err: Error) => void
 ): Unsubscribe {
   const cacheKey = `public_materials_limit_${limit}`;
-  let isSubscribed = true;
 
-  // Stale-While-Revalidate: deliver fresh or session-cached data immediately (0 ms catalog paint)
-  const cached =
-    cacheService.get<StudyMaterial[]>('public_materials') ||
-    cacheService.get<StudyMaterial[]>(cacheKey) ||
-    cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
-    cacheService.get<StudyMaterial[]>('public_materials_limit_100');
+  let state = sharedMaterialsLimitMap.get(limit);
+  if (!state) {
+    state = {
+      subscribers: new Set(),
+      latestData: null,
+      cleanup: null,
+    };
+    sharedMaterialsLimitMap.set(limit, state);
+  }
 
-  if (cached && cached.length > 0) {
+  // 1. Immediate Delivery from memory / cache
+  if (state.latestData && state.latestData.length > 0) {
     try {
-      callback(cached.slice(0, limit));
-    } catch (e) {
-      console.warn('Error in public materials cached callback:', e);
+      callback(state.latestData);
+    } catch {}
+  } else {
+    const cached =
+      cacheService.get<StudyMaterial[]>('public_materials') ||
+      cacheService.get<StudyMaterial[]>(cacheKey) ||
+      cacheService.get<StudyMaterial[]>('public_materials_limit_150') ||
+      cacheService.get<StudyMaterial[]>('public_materials_limit_100');
+    if (cached && cached.length > 0) {
+      try {
+        callback(cached.slice(0, limit));
+      } catch {}
     }
   }
 
-  if (!isFirebaseConfigured || !database) {
-    if (!cached || cached.length === 0) {
+  // 2. Register subscriber
+  state.subscribers.add(callback);
+
+  // 3. Setup single shared underlying listener per limit
+  if (!state.cleanup) {
+    const currentState = state;
+    if (!isFirebaseConfigured || !database) {
       loadDemoMaterials().then((demo) => {
         const filtered = demo.filter((m) => m.published === true).slice(0, limit);
-        if (isSubscribed) {
-          indexMaterialsInCache(filtered);
-          callback(filtered);
+        currentState.latestData = filtered;
+        indexMaterialsInCache(filtered);
+        for (const sub of currentState.subscribers) {
+          try {
+            sub(filtered);
+          } catch {}
         }
       });
+      currentState.cleanup = () => {};
+    } else {
+      const pubRef = ref(database, 'publicMaterials');
+      const q = query(pubRef, orderByChild('createdAt'), limitToLast(limit));
+
+      const unsubDb = onValue(
+        q,
+        (snapshot: RtdbSnapshot) => {
+          let materials: StudyMaterial[] = [];
+          if (snapshot.exists()) {
+            const data = snapshot.val();
+            materials = Object.keys(data)
+              .map((id) => ({
+                ...data[id],
+                id,
+              }))
+              .filter((m) => m.published === true);
+            materials.sort(compareMaterialsAscending);
+          }
+          if (materials.length === 0) {
+            loadDemoMaterials().then((demo) => {
+              const filtered = demo.filter((m) => m.published === true).slice(0, limit);
+              currentState.latestData = filtered;
+              cacheService.set('public_materials', filtered, 120_000);
+              cacheService.set(cacheKey, filtered, 120_000);
+              indexMaterialsInCache(filtered);
+              for (const sub of currentState.subscribers) {
+                try {
+                  sub(filtered);
+                } catch {}
+              }
+            });
+            return;
+          }
+          currentState.latestData = materials;
+          cacheService.set('public_materials', materials, 120_000);
+          cacheService.set(cacheKey, materials, 120_000);
+          indexMaterialsInCache(materials);
+          for (const sub of currentState.subscribers) {
+            try {
+              sub(materials);
+            } catch (e) {
+              console.warn('Error in public materials subscriber callback:', e);
+            }
+          }
+        },
+        (err: Error) => {
+          console.warn('Public materials subscription warning:', err);
+          if (onError) onError(err);
+        }
+      );
+
+      currentState.cleanup = unsubDb;
     }
-    return () => {
-      isSubscribed = false;
-    };
   }
 
-  const pubRef = ref(database, 'publicMaterials');
-  const q = query(pubRef, orderByChild('createdAt'), limitToLast(limit));
-
-  const unsubscribe = onValue(
-    q,
-    (snapshot: RtdbSnapshot) => {
-      if (!isSubscribed) return;
-      let materials: StudyMaterial[] = [];
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        materials = Object.keys(data)
-          .map((id) => ({
-            ...data[id],
-            id,
-          }))
-          .filter((m) => m.published === true); // Strictly require published === true
-        materials.sort(compareMaterialsAscending);
-      }
-      if (materials.length === 0) {
-        loadDemoMaterials().then((demo) => {
-          const filtered = demo.filter((m) => m.published === true).slice(0, limit);
-          if (isSubscribed) {
-            indexMaterialsInCache(filtered);
-            callback(filtered);
-          }
-        });
-        return;
-      }
-      cacheService.set('public_materials', materials, 120_000);
-      cacheService.set(cacheKey, materials, 120_000);
-      indexMaterialsInCache(materials);
-      callback(materials);
-    },
-    (error: Error) => {
-      if (!isSubscribed) return;
-      console.warn('Realtime public materials listener warning, using demo catalog:', error);
-      if (onError) onError(error);
-      if (!cached || cached.length === 0) {
-        loadDemoMaterials().then((demo) => {
-          const filtered = demo.filter((m) => m.published === true).slice(0, limit);
-          if (isSubscribed) {
-            indexMaterialsInCache(filtered);
-            callback(filtered);
-          }
-        });
-      }
-    }
-  );
-
+  // 4. Return reference-counted unsubscribe
   return () => {
-    isSubscribed = false;
-    unsubscribe();
+    state?.subscribers.delete(callback);
+    if (state && state.subscribers.size === 0 && state.cleanup) {
+      state.cleanup();
+      state.cleanup = null;
+    }
   };
 }
 

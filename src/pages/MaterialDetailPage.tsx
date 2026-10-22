@@ -17,6 +17,9 @@ import { StudyMaterial, Subject, CATEGORIES } from '../types';
 import {
   getPublicMaterialById,
   getPublicSubjects,
+  getPublicSemesters,
+  getAllSubjectsAdmin,
+  isSubjectSemesterActive,
   getPublicMaterialsBySubject,
   fetchPdfBlobUrl,
   downloadStudyMaterial,
@@ -65,6 +68,7 @@ export const MaterialDetailPage: React.FC = () => {
     return null;
   });
 
+  const [semesterUnavailable, setSemesterUnavailable] = useState(false);
   const [relatedMaterials, setRelatedMaterials] = useState<StudyMaterial[]>([]);
   const [loading, setLoading] = useState<boolean>(() => {
     if (!materialId) return true;
@@ -84,20 +88,35 @@ export const MaterialDetailPage: React.FC = () => {
     async function loadData() {
       if (!materialId) return;
       try {
-        const [mat, subs] = await Promise.all([
+        const [mat, subs, activeSems] = await Promise.all([
           getPublicMaterialById(materialId),
           getPublicSubjects(),
+          getPublicSemesters().catch(() => []),
         ]);
-
-        setMaterial(mat);
 
         if (mat) {
           const sub = subs.find((s) => s.id === mat.subjectId) || null;
-          setSubject(sub);
+          if (sub) {
+            setSubject(sub);
+            setMaterial(mat);
+            setSemesterUnavailable(false);
 
-          // Fetch related materials from same subject
-          const related = await getPublicMaterialsBySubject(mat.subjectId);
-          setRelatedMaterials(related.filter((r) => r.id !== mat.id).slice(0, 4));
+            // Fetch related materials from same subject
+            const related = await getPublicMaterialsBySubject(mat.subjectId);
+            setRelatedMaterials(related.filter((r) => r.id !== mat.id).slice(0, 4));
+          } else {
+            // Check if subject exists but its semester is inactive
+            const allSubs = await getAllSubjectsAdmin();
+            const rawSub = allSubs.find((s) => s.id === mat.subjectId);
+            if (rawSub && !isSubjectSemesterActive(rawSub, activeSems)) {
+              setSemesterUnavailable(true);
+              setMaterial(null);
+            } else {
+              setMaterial(mat);
+            }
+          }
+        } else {
+          setMaterial(null);
         }
       } catch (err) {
         console.error('Error loading material details:', err);
@@ -147,6 +166,20 @@ export const MaterialDetailPage: React.FC = () => {
         <RefreshCw className="w-10 h-10 text-blue-600 animate-spin mx-auto mb-3" />
         <p className="text-sm font-semibold text-slate-700">Loading study material...</p>
         <p className="text-xs text-slate-400 mt-1">Fetching metadata from Realtime Database</p>
+      </div>
+    );
+  }
+
+  if (semesterUnavailable) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+        <EmptyState
+          icon="folder"
+          title="This semester is currently unavailable."
+          description="The curriculum and study materials for this semester are currently deactivated or undergoing review."
+          actionText="Return to All Materials"
+          actionTo="/materials"
+        />
       </div>
     );
   }

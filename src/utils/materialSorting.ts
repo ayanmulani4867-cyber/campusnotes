@@ -111,6 +111,21 @@ export function extractMaterialNumber(m: Partial<StudyMaterial>): number | null 
   return null;
 }
 
+const materialNumberCache = new WeakMap<object, number | null>();
+
+/**
+ * Returns cached material number or extracts and memoizes it in WeakMap
+ */
+export function getCachedMaterialNumber(m: Partial<StudyMaterial>): number | null {
+  if (!m || typeof m !== 'object') return extractMaterialNumber(m);
+  let val = materialNumberCache.get(m);
+  if (val === undefined) {
+    val = extractMaterialNumber(m);
+    materialNumberCache.set(m, val);
+  }
+  return val;
+}
+
 /**
  * Universal comparator function to sort study materials in ascending order:
  * 1. Subject order (e.g. 23CS3501 AJP -> 23CS3502 DAA -> etc.)
@@ -145,8 +160,8 @@ export function compareMaterialsAscending(a: StudyMaterial, b: StudyMaterial): n
   }
 
   // 3. Numerical value (numerical, not alphabetical: 2 before 10)
-  const numA = extractMaterialNumber(a);
-  const numB = extractMaterialNumber(b);
+  const numA = getCachedMaterialNumber(a);
+  const numB = getCachedMaterialNumber(b);
   if (numA !== null && numB !== null) {
     if (numA !== numB) return numA - numB;
   } else if (numA !== null) {

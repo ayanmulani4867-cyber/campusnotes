@@ -7,9 +7,11 @@ import {
 import { Subject, StudyMaterial, Semester } from '../types';
 import { OFFICIAL_CSE_SEM_5_SUBJECTS } from '../constants/subjects';
 import {
-  getPublicSubjects,
-  getPublicMaterials,
+  subscribeToPublicSubjects,
+  subscribeToPublicMaterials,
+  subscribeToPublicSemesters,
   getPublicSemesters,
+  isSubjectSemesterActive,
   DEFAULT_SEMESTER_5,
 } from '../services/firebaseService';
 import { SubjectCardSkeleton } from '../components/common/Skeleton';
@@ -52,52 +54,86 @@ export const SubjectsPage: React.FC = () => {
   });
 
   useEffect(() => {
-    async function loadData() {
-      try {
-        const [subs, mats, sems] = await Promise.all([
-          getPublicSubjects(),
-          getPublicMaterials(150),
-          getPublicSemesters().catch(() => [DEFAULT_SEMESTER_5]),
-        ]);
-        const finalSubs =
-          subs && subs.length > 0
-            ? subs
-            : OFFICIAL_CSE_SEM_5_SUBJECTS.map((s) => ({
-                ...s,
-                semesterId: 'sem_5',
-                semesterNumber: 5,
-                createdAt: Date.now(),
-                updatedAt: Date.now(),
-              }));
-        setSubjects(finalSubs);
-        setMaterials(mats);
+    let isMounted = true;
+
+    // Initial fetch from getPublicSemesters
+    getPublicSemesters()
+      .then((sems) => {
+        if (!isMounted) return;
+        if (sems && sems.length > 0) setSemesters(sems);
+      })
+      .catch(() => {});
+
+    const unsubSems = subscribeToPublicSemesters(
+      (sems) => {
+        if (!isMounted) return;
         setSemesters(sems && sems.length > 0 ? sems : [DEFAULT_SEMESTER_5]);
-      } catch (err) {
-        console.error('Error loading subjects:', err);
-        setSubjects(
-          OFFICIAL_CSE_SEM_5_SUBJECTS.map((s) => ({
-            ...s,
-            semesterId: 'sem_5',
-            semesterNumber: 5,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          }))
-        );
-      } finally {
+      },
+      (err) => console.warn('Subjects page semesters listener notice:', err)
+    );
+
+    const unsubSubs = subscribeToPublicSubjects(
+      (subs) => {
+        if (!isMounted) return;
+        setSubjects(subs);
         setLoading(false);
+      },
+      (err) => {
+        console.warn('Subjects page subjects listener notice:', err);
+        if (isMounted) setLoading(false);
+      }
+    );
+
+    const unsubMats = subscribeToPublicMaterials(
+      (mats) => {
+        if (!isMounted) return;
+        setMaterials(mats);
+      },
+      150,
+      (err) => console.warn('Subjects page materials listener notice:', err)
+    );
+
+    return () => {
+      isMounted = false;
+      unsubSems();
+      unsubSubs();
+      unsubMats();
+    };
+  }, []);
+
+  // Auto-reset selected semester if it was deactivated by an admin
+  useEffect(() => {
+    if (selectedSemesterId !== 'all' && semesters.length > 0) {
+      const exists = semesters.some((s) => s.id === selectedSemesterId);
+      if (!exists) {
+        setSelectedSemesterId('all');
       }
     }
-    loadData();
-  }, []);
+  }, [semesters, selectedSemesterId]);
 
   const getMaterialCountForSubject = (subjectId: string): number => {
     return materials.filter((m) => m.subjectId === subjectId && m.published).length;
   };
 
   const filteredSubjects = useMemo(() => {
-    if (selectedSemesterId === 'all') return subjects;
-    return subjects.filter((s) => (s.semesterId || 'sem_5') === selectedSemesterId);
-  }, [subjects, selectedSemesterId]);
+    // Only subjects whose semester is currently active
+    const active = subjects.filter(
+      (s) => s.active !== false && isSubjectSemesterActive(s, semesters)
+    );
+    if (selectedSemesterId === 'all') return active;
+
+    return active.filter((s) => {
+      if (s.semesterId && s.semesterId === selectedSemesterId) return true;
+      const targetSem = semesters.find((sem) => sem.id === selectedSemesterId);
+      if (targetSem && typeof s.semesterNumber === 'number') {
+        return s.semesterNumber === targetSem.number;
+      }
+      if (!s.semesterId && (selectedSemesterId === 'sem_5' || (targetSem && targetSem.number === 5))) {
+        return true;
+      }
+      return false;
+    });
+  }, [subjects, selectedSemesterId, semesters]);
 
   const activeSemesterObj = semesters.find((s) => s.id === selectedSemesterId);
 

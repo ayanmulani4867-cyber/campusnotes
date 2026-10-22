@@ -26,6 +26,9 @@ export default defineConfig({
           ) {
             return 'vendor-react';
           }
+          if (id.includes('node_modules/firebase') || id.includes('node_modules/@firebase')) {
+            return 'vendor-firebase';
+          }
         },
       },
     },
