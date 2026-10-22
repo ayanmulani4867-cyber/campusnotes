@@ -154,7 +154,7 @@ export const AboutPage: React.FC = () => {
               Can I share materials with my peers?
             </h4>
             <p className="text-xs sm:text-sm text-slate-500 mt-1 leading-relaxed">
-              Yes. Every study material features an integrated share button that lets you quickly copy a formatted link or share directly to your study group.
+              Yes. Every study material features an integrated share button that lets you quickly copy the direct link or share directly to your study group.
             </p>
           </div>
         </div>

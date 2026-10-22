@@ -65,6 +65,7 @@ const ChevronDown = /* @__PURE__ */ createLucideIcon('chevron-down', [["path",{"
 const ChevronUp = /* @__PURE__ */ createLucideIcon('chevron-up', [["path",{"d":"m18 15-6-6-6 6","key":"153udz"}]]);
 const Clock = /* @__PURE__ */ createLucideIcon('clock', [["circle",{"cx":"12","cy":"12","r":"10","key":"1mglay"}],["path",{"d":"M12 6v6l4 2","key":"mmk7yg"}]]);
 const Compass = /* @__PURE__ */ createLucideIcon('compass', [["circle",{"cx":"12","cy":"12","r":"10","key":"1mglay"}],["path",{"d":"m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z","key":"9ktpf1"}]]);
+const Copy = /* @__PURE__ */ createLucideIcon('copy', [["rect",{"width":"14","height":"14","x":"8","y":"8","rx":"2","ry":"2","key":"17jyea"}],["path",{"d":"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2","key":"1eonqg"}]]);
 const Database = /* @__PURE__ */ createLucideIcon('database', [["ellipse",{"cx":"12","cy":"5","rx":"9","ry":"3","key":"msslwz"}],["path",{"d":"M3 5V19A9 3 0 0 0 21 19V5","key":"1wlel7"}],["path",{"d":"M3 12A9 3 0 0 0 21 12","key":"mv7ke4"}]]);
 const Download = /* @__PURE__ */ createLucideIcon('download', [["path",{"d":"M12 15V3","key":"m9g1x1"}],["path",{"d":"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4","key":"ih7n3h"}],["path",{"d":"m7 10 5 5 5-5","key":"brsn70"}]]);
 const CloudDownload = /* @__PURE__ */ createLucideIcon('cloud-download', [["path",{"d":"M12 13v8l-4-4","key":"1f5nwf"}],["path",{"d":"m12 21 4-4","key":"1lfcce"}],["path",{"d":"M4.393 15.269A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.436 8.284","key":"ui1hmy"}]]);
@@ -132,6 +133,7 @@ export {
   ChevronUp,
   Clock,
   Compass,
+  Copy,
   Database,
   Download,
   CloudDownload as DownloadCloud,

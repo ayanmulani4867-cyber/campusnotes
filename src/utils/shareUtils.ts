@@ -60,100 +60,33 @@ export function resolveSubjectName(
 }
 
 /**
- * Builds the structured share message according to CampusNotes specification:
- * CampusNotes — Study Material
- *
- * Subject: [actual subject name]
- * Assignment: [actual assignment name]
- * Unit: [actual unit, if available]
- * PDF: [actual PDF title]
- *
- * View PDF: [actual working material URL]
- *
- * Missing fields are omitted gracefully without printing undefined, null, or incorrect data.
+ * Generates the clean direct PDF link for sharing:
+ * Shares only the direct link to that specific PDF with no extra text, message, or metadata.
+ * Example: https://campusnotes.space/materials/mat_123456
  */
 export const OFFICIAL_SHARE_LINK = 'https://campusnotes.space';
 
 export function formatShareText(
   material: ShareMaterialMetadata,
-  subjectName?: string | null,
+  _subjectName?: string | null,
   shareUrl: string = OFFICIAL_SHARE_LINK
 ): string {
-  const lines: string[] = ['CampusNotes — Study Material'];
-
-  if (subjectName && subjectName.trim()) {
-    lines.push(`Subject: ${subjectName.trim()}`);
+  if (material.id) {
+    return `https://campusnotes.space/materials/${material.id}`;
   }
-
-  // Assignment name or number
-  if (
-    material.assignmentNumber !== undefined &&
-    material.assignmentNumber !== null &&
-    String(material.assignmentNumber).trim() !== ''
-  ) {
-    const numStr = String(material.assignmentNumber).trim();
-    const assignText = numStr.toLowerCase().startsWith('assignment')
-      ? numStr
-      : `Assignment ${numStr}`;
-    lines.push(`Assignment: ${assignText}`);
-  } else if (
-    material.category === 'assignments' &&
-    material.title &&
-    material.title.toLowerCase().includes('assignment')
-  ) {
-    lines.push(`Assignment: ${material.title.trim()}`);
-  }
-
-  // Experiment / Practical (if applicable)
-  if (
-    material.experimentNumber !== undefined &&
-    material.experimentNumber !== null &&
-    String(material.experimentNumber).trim() !== ''
-  ) {
-    const expStr = String(material.experimentNumber).trim();
-    const expText = expStr.toLowerCase().startsWith('exp')
-      ? expStr
-      : `Experiment ${expStr}`;
-    lines.push(`Experiment: ${expText}`);
-  }
-
-  // Unit or chapter
-  if (
-    material.unitNumber !== undefined &&
-    material.unitNumber !== null &&
-    String(material.unitNumber).trim() !== ''
-  ) {
-    const unitStr = String(material.unitNumber).trim();
-    const unitText =
-      unitStr.toLowerCase().startsWith('unit') ||
-      unitStr.toLowerCase().startsWith('chapter')
-        ? unitStr
-        : `Unit ${unitStr}`;
-    lines.push(`Unit: ${unitText}`);
-  }
-
-  // PDF/material title
-  const pdfTitle = (material.title || material.fileName || '').trim();
-  if (pdfTitle) {
-    lines.push(`PDF: ${pdfTitle}`);
-  }
-
-  // Working material link - exactly one link: https://campusnotes.space
-  const link = shareUrl && shareUrl.trim() ? shareUrl.trim() : OFFICIAL_SHARE_LINK;
-  lines.push(`View PDF: ${link}`);
-
-  return lines.join('\n');
+  return shareUrl && shareUrl.trim() ? shareUrl.trim() : OFFICIAL_SHARE_LINK;
 }
 
 /**
  * Shared utility for sharing CampusNotes study materials:
- * 1. Generates a canonical, stable URL: https://campusnotes.space.
- *    // Internal route reference: ${window.location.origin}/materials/${material.id}
- * 2. Uses the native Web Share API (navigator.share) on supported platforms (Android, iOS, modern desktop).
- * 3. Gracefully handles user cancellation (AbortError) without false error notifications.
- * 4. Provides a robust fallback to clipboard copying (via navigator.clipboard or textarea execCommand).
- * 5. Does NOT fetch or transfer PDF blob data just to share.
- * 6. Never exposes private R2 object keys, Firebase credentials, or unauthorized unpublished PDFs in shared URLs.
+ * 1. Generates a canonical, stable URL: https://campusnotes.space/materials/${material.id}
+ *    // Canonical URL reference: ${window.location.origin}/materials/${material.id}
+ * 2. Shares ONLY the direct link to that specific PDF (no message, title, subject, assignment number, or description).
+ * 3. Uses the native Web Share API (navigator.share) on supported platforms (Android, iOS, modern desktop).
+ * 4. Gracefully handles user cancellation (AbortError) without false error notifications.
+ * 5. Provides a robust fallback to clipboard copying (via navigator.clipboard or textarea execCommand).
+ * 6. Does NOT fetch or transfer PDF blob data just to share.
+ * 7. Never exposes private R2 object keys, Firebase credentials, or unauthorized unpublished PDFs in shared URLs.
  */
 export async function shareMaterial(
   material: ShareMaterialMetadata,
@@ -169,36 +102,17 @@ export async function shareMaterial(
     return false;
   }
 
-  // Use the official domain with the exact material ID route
   // Canonical URL reference: ${window.location.origin}/materials/${material.id}
   const shareUrl = `https://campusnotes.space/materials/${material.id}`;
 
-  const subjectName = resolveSubjectName(material, subject);
-  const formattedText = formatShareText(material, subjectName, shareUrl);
+  const _subjectName = resolveSubjectName(material, subject);
 
-  // Avoid duplicating the link by only providing text (which already embeds the single official URL)
+  // Avoid extra text: share only the direct PDF link URL
   const shareData = {
-    title: material.title ? `${material.title} — CampusNotes` : 'CampusNotes — Study Material',
-    text: formattedText,
+    url: shareUrl,
   };
 
-  // Open modern interactive Share Sheet on browser allowing selection of WhatsApp, Telegram, etc.
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(
-      new CustomEvent('campusnotes:share', {
-        detail: {
-          material,
-          subjectName,
-          formattedText,
-          shareUrl,
-          title: shareData.title,
-        },
-      })
-    );
-    return true;
-  }
-
-  // 1. Try native Web Share API (Mobile phones, tablets, supported desktop browsers)
+  // 1. Immediately call the browser's native navigator.share() API to open device system share menu
   if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
     try {
       if (!navigator.canShare || navigator.canShare(shareData)) {
@@ -219,11 +133,11 @@ export async function shareMaterial(
     }
   }
 
-  // 2. Clipboard API fallback
+  // 2. Simple Copy Link fallback if native sharing is unsupported
   let copied = false;
   if (typeof navigator !== 'undefined' && navigator.clipboard) {
     try {
-      await navigator.clipboard.writeText(formattedText);
+      await navigator.clipboard.writeText(shareUrl);
       copied = true;
     } catch {
       copied = false;
@@ -234,10 +148,11 @@ export async function shareMaterial(
   if (!copied && typeof document !== 'undefined') {
     try {
       const textarea = document.createElement('textarea');
-      textarea.value = formattedText;
+      textarea.value = shareUrl;
       textarea.style.position = 'fixed';
       textarea.style.left = '-999999px';
       textarea.style.top = '-999999px';
+      textarea.setAttribute('readonly', '');
       document.body.appendChild(textarea);
       textarea.focus();
       textarea.select();
@@ -249,10 +164,10 @@ export async function shareMaterial(
   }
 
   if (copied) {
-    showToast?.('Link Copied', 'Study material details and link copied to clipboard.');
+    showToast?.('Link Copied', shareUrl);
     return true;
   } else {
-    showToast?.('Share Material', formattedText);
+    showToast?.('Share Material', shareUrl);
     return false;
   }
 }

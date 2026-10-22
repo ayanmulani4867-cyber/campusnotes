@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 console.log('======================================================================');
-console.log('  CAMPUSNOTES — METADATA-AWARE SHARE PDF FEATURE TEST SUITE');
+console.log('  CAMPUSNOTES — DIRECT LINK SHARE PDF FEATURE TEST SUITE');
 console.log('======================================================================\n');
 
 let passed = 0;
@@ -45,234 +45,70 @@ test('Unpublished material sharing is guarded and blocked', () => {
 });
 
 // -----------------------------------------------------------------------------
-// Suite 2: Functional Metadata Formatting & Graceful Degradation
+// Suite 2: Direct PDF URL Generation & Clean Link Integrity
 // -----------------------------------------------------------------------------
-console.log('\n--- Test Suite 2: Dynamic Metadata Formatting & Field Resolution ---');
-
-// Extract and test formatShareText and resolveSubjectName directly in Node
-// We read OFFICIAL_CSE_SEM_5_SUBJECTS from src/constants/subjects.ts
-const subjectsCode = fs.readFileSync('src/constants/subjects.ts', 'utf8');
-const subjectsMatch = subjectsCode.match(/export const OFFICIAL_CSE_SEM_5_SUBJECTS.*?=\s*(\[[\s\S]*?\]);/);
-assert(subjectsMatch, 'Could not parse OFFICIAL_CSE_SEM_5_SUBJECTS from subjects.ts');
-// Safely evaluate subjects array for testing
-const OFFICIAL_CSE_SEM_5_SUBJECTS = eval(subjectsMatch[1]);
+console.log('\n--- Test Suite 2: Direct PDF URL Generation & Clean Link Integrity ---');
 
 function formatShareText(material, subjectName, shareUrl) {
-  const lines = ['CampusNotes — Study Material', ''];
-
-  if (subjectName && subjectName.trim()) {
-    lines.push(`Subject: ${subjectName.trim()}`);
+  if (material.id) {
+    return `https://campusnotes.space/materials/${material.id}`;
   }
-
-  // Assignment name or number
-  if (
-    material.assignmentNumber !== undefined &&
-    material.assignmentNumber !== null &&
-    String(material.assignmentNumber).trim() !== ''
-  ) {
-    const numStr = String(material.assignmentNumber).trim();
-    const assignText = numStr.toLowerCase().startsWith('assignment')
-      ? numStr
-      : `Assignment ${numStr}`;
-    lines.push(`Assignment: ${assignText}`);
-  } else if (
-    material.category === 'assignments' &&
-    material.title &&
-    material.title.toLowerCase().includes('assignment')
-  ) {
-    lines.push(`Assignment: ${material.title.trim()}`);
-  }
-
-  // Experiment / Practical (if applicable)
-  if (
-    material.experimentNumber !== undefined &&
-    material.experimentNumber !== null &&
-    String(material.experimentNumber).trim() !== ''
-  ) {
-    const expStr = String(material.experimentNumber).trim();
-    const expText = expStr.toLowerCase().startsWith('exp')
-      ? expStr
-      : `Experiment ${expStr}`;
-    lines.push(`Experiment: ${expText}`);
-  }
-
-  // Unit or chapter
-  if (
-    material.unitNumber !== undefined &&
-    material.unitNumber !== null &&
-    String(material.unitNumber).trim() !== ''
-  ) {
-    const unitStr = String(material.unitNumber).trim();
-    const unitText =
-      unitStr.toLowerCase().startsWith('unit') ||
-      unitStr.toLowerCase().startsWith('chapter')
-        ? unitStr
-        : `Unit ${unitStr}`;
-    lines.push(`Unit: ${unitText}`);
-  }
-
-  // PDF/material title
-  const pdfTitle = (material.title || material.fileName || '').trim();
-  if (pdfTitle) {
-    lines.push(`PDF: ${pdfTitle}`);
-  }
-
-  // Working material link
-  if (shareUrl && shareUrl.trim()) {
-    lines.push('');
-    lines.push(`View PDF: ${shareUrl.trim()}`);
-  }
-
-  return lines.join('\n');
+  return shareUrl && shareUrl.trim() ? shareUrl.trim() : 'https://campusnotes.space';
 }
 
-function resolveSubjectName(material, providedSubject) {
-  if (providedSubject?.name && providedSubject.name.trim()) {
-    return providedSubject.name.trim();
-  }
-
-  if (!material.subjectId) return null;
-
-  const staticMatch = OFFICIAL_CSE_SEM_5_SUBJECTS.find(
-    (s) =>
-      s.id === material.subjectId ||
-      (s.code && s.code.toLowerCase() === material.subjectId?.toLowerCase())
-  );
-  if (staticMatch?.name && staticMatch.name.trim()) {
-    return staticMatch.name.trim();
-  }
-
-  return null;
-}
-
-test('Full Assignment format matches specification exactly', () => {
+test('Direct link sharing generates strictly the specific PDF material URL without extra text', () => {
   const material = {
-    id: 'mat_assign_java_1',
+    id: 'mat_123456',
     title: 'Assignment 1: Multithreading & Concurrency Synchronization',
     subjectId: '23cs3501_ajp',
     category: 'assignments',
     assignmentNumber: 1,
     unitNumber: 1,
+    description: 'Detailed multithreading concepts and examples',
   };
-  const subjectName = resolveSubjectName(material, { name: 'Advanced Java Programming' });
-  const shareUrl = 'https://campusnotes.dev/materials/mat_assign_java_1';
+  const output = formatShareText(material, 'Advanced Java Programming', 'https://campusnotes.space/materials/mat_123456');
 
-  const output = formatShareText(material, subjectName, shareUrl);
-
-  const expected = [
-    'CampusNotes — Study Material',
-    '',
-    'Subject: Advanced Java Programming',
-    'Assignment: Assignment 1',
-    'Unit: Unit 1',
-    'PDF: Assignment 1: Multithreading & Concurrency Synchronization',
-    '',
-    'View PDF: https://campusnotes.dev/materials/mat_assign_java_1',
-  ].join('\n');
-
-  assert.strictEqual(output, expected);
+  assert.strictEqual(output, 'https://campusnotes.space/materials/mat_123456');
+  assert(!output.includes('CampusNotes — Study Material'), 'Must not contain introductory header');
+  assert(!output.includes('Subject:'), 'Must not contain Subject text');
+  assert(!output.includes('Assignment:'), 'Must not contain Assignment text');
+  assert(!output.includes('Unit:'), 'Must not contain Unit text');
+  assert(!output.includes('PDF:'), 'Must not contain PDF title prefix');
+  assert(!output.includes('View PDF:'), 'Must not contain View PDF prefix');
+  assert(!output.includes('Detailed multithreading concepts'), 'Must not contain description');
 });
 
-test('Subject auto-resolution resolves official subject name from subjectId', () => {
-  const material = {
-    id: 'mat_assign_daa_3',
-    subjectId: '23cs3502_daa',
-    title: 'Assignment 3: Dynamic Programming',
-    assignmentNumber: 3,
-  };
-  const subjectName = resolveSubjectName(material, null);
-  assert.strictEqual(subjectName, 'Design Analysis and Algorithms');
+test('Different materials produce strictly their own distinct material URLs', () => {
+  const materials = [
+    { id: 'mat_assign_java_1', title: 'Java Assignment 1' },
+    { id: 'mat_notes_ade_unit2', title: 'ADE Unit 2 Notes' },
+    { id: 'mat_pyq_daa_2025', title: 'DAA Midsem PYQ 2025' },
+    { id: 'mat_exp_cn_socket', title: 'Socket Programming Lab' },
+  ];
+
+  const urls = materials.map((m) => formatShareText(m, null, `https://campusnotes.space/materials/${m.id}`));
+
+  assert.strictEqual(urls[0], 'https://campusnotes.space/materials/mat_assign_java_1');
+  assert.strictEqual(urls[1], 'https://campusnotes.space/materials/mat_notes_ade_unit2');
+  assert.strictEqual(urls[2], 'https://campusnotes.space/materials/mat_pyq_daa_2025');
+  assert.strictEqual(urls[3], 'https://campusnotes.space/materials/mat_exp_cn_socket');
+  // Ensure each URL is unique and corresponds to its own PDF
+  assert.strictEqual(new Set(urls).size, materials.length);
 });
 
-test('Subject auto-resolution works with course code as subjectId', () => {
-  const material = {
-    id: 'mat_ade_notes',
-    subjectId: '23CS3503',
-    title: 'Query Optimization Notes',
-  };
-  const subjectName = resolveSubjectName(material, null);
-  assert.strictEqual(subjectName, 'Advanced Database Engineering');
+test('Share URL uses canonical domain campusnotes.space and /materials/:id path', () => {
+  const material = { id: 'mat_cloud_lab' };
+  const output = formatShareText(material);
+  assert(output.startsWith('https://campusnotes.space/materials/'));
+  assert.strictEqual(output, 'https://campusnotes.space/materials/mat_cloud_lab');
 });
 
-test('Lecture note with Unit omits Assignment field gracefully', () => {
-  const material = {
-    id: 'mat_notes_ade_unit2',
-    title: 'Unit 2: Query Processing & Optimization Notes',
-    subjectId: '23cs3503_ade',
-    category: 'notes',
-    unitNumber: 2,
-  };
-  const subjectName = resolveSubjectName(material, null);
-  const shareUrl = 'https://campusnotes.dev/materials/mat_notes_ade_unit2';
-
-  const output = formatShareText(material, subjectName, shareUrl);
-
-  assert(output.includes('Subject: Advanced Database Engineering'));
-  assert(output.includes('Unit: Unit 2'));
-  assert(output.includes('PDF: Unit 2: Query Processing & Optimization Notes'));
-  assert(output.includes('View PDF: https://campusnotes.dev/materials/mat_notes_ade_unit2'));
-  assert(!output.includes('Assignment:'), 'Assignment line should NOT appear in Lecture Notes');
-  assert(!output.includes('undefined'), 'Output must not contain undefined');
-  assert(!output.includes('null'), 'Output must not contain null');
-});
-
-test('Practical/Lab experiment formats with Experiment field', () => {
-  const material = {
-    id: 'mat_exp_javalab_1',
-    title: 'Experiment 1: Multithreaded Producer-Consumer Problem',
-    subjectId: '23cs3504_ajp_lab',
-    category: 'experiments',
-    experimentNumber: 1,
-  };
-  const subjectName = resolveSubjectName(material, null);
-  const shareUrl = 'https://campusnotes.dev/materials/mat_exp_javalab_1';
-
-  const output = formatShareText(material, subjectName, shareUrl);
-
-  assert(output.includes('Subject: Advanced Java Programming Laboratory'));
-  assert(output.includes('Experiment: Experiment 1'));
-  assert(output.includes('PDF: Experiment 1: Multithreaded Producer-Consumer Problem'));
-  assert(output.includes('View PDF: https://campusnotes.dev/materials/mat_exp_javalab_1'));
-  assert(!output.includes('Unit:'), 'Unit line should be omitted when missing');
-  assert(!output.includes('Assignment:'), 'Assignment line should be omitted for experiments');
-});
-
-test('PYQ paper omits Assignment, Experiment, and Unit gracefully', () => {
-  const material = {
-    id: 'mat_pyq_daa_2025',
-    title: 'DAA Mid-Semester University Question Paper 2025',
-    subjectId: '23cs3502_daa',
-    category: 'pyq',
-  };
-  const subjectName = resolveSubjectName(material, null);
-  const shareUrl = 'https://campusnotes.dev/materials/mat_pyq_daa_2025';
-
-  const output = formatShareText(material, subjectName, shareUrl);
-
-  assert(output.includes('Subject: Design Analysis and Algorithms'));
-  assert(output.includes('PDF: DAA Mid-Semester University Question Paper 2025'));
-  assert(!output.includes('Assignment:'));
-  assert(!output.includes('Experiment:'));
-  assert(!output.includes('Unit:'));
-});
-
-test('Minimal material with no subject or numbers formats cleanly', () => {
-  const material = {
-    id: 'mat_unknown_1',
-    title: 'CSE Semester 5 General Reference Guide',
-  };
-  const subjectName = resolveSubjectName(material, null);
-  const shareUrl = 'https://campusnotes.dev/materials/mat_unknown_1';
-
-  const output = formatShareText(material, subjectName, shareUrl);
-
-  assert(output.startsWith('CampusNotes — Study Material\n\nPDF: CSE Semester 5 General Reference Guide'));
-  assert(output.endsWith('View PDF: https://campusnotes.dev/materials/mat_unknown_1'));
-  assert(!output.includes('Subject:'));
-  assert(!output.includes('Assignment:'));
-  assert(!output.includes('Unit:'));
-  assert(!output.includes('undefined'));
-  assert(!output.includes('null'));
+test('Custom ShareModal popup is removed and does not intercept sharing', () => {
+  assert(!fs.existsSync('src/components/common/ShareModal.tsx'), 'ShareModal.tsx must be completely removed');
+  const appCode = fs.readFileSync('src/App.tsx', 'utf8');
+  assert(!appCode.includes('ShareModal'), 'App.tsx must not import or render ShareModal');
+  const shareUtilsSource = fs.readFileSync('src/utils/shareUtils.ts', 'utf8');
+  assert(!shareUtilsSource.includes('campusnotes:share'), 'shareUtils must not dispatch custom share modal event');
 });
 
 // -----------------------------------------------------------------------------
@@ -280,7 +116,6 @@ test('Minimal material with no subject or numbers formats cleanly', () => {
 // -----------------------------------------------------------------------------
 console.log('\n--- Test Suite 3: Web Share API & Clipboard Fallback Behavior ---');
 
-// Mock browser environments
 class MockNavigator {
   constructor({ shareSupported = false, shareRejection = null, clipboardSupported = false }) {
     this._shareSupported = shareSupported;
@@ -309,21 +144,14 @@ class MockNavigator {
   }
 }
 
-// Emulate shareMaterial in Node using mocks
 async function runMockShareMaterial(material, showToast, subject, mockNav, isSecure = true) {
   if (material.published === false) {
     showToast?.('Material Unpublished', 'This study material is unpublished and cannot be shared publicly.');
     return false;
   }
 
-  const origin = 'https://campusnotes.dev';
-  const shareUrl = `${origin}/materials/${material.id}`;
-  const subjectName = resolveSubjectName(material, subject);
-  const formattedText = formatShareText(material, subjectName, shareUrl);
-
+  const shareUrl = `https://campusnotes.space/materials/${material.id}`;
   const shareData = {
-    title: material.title ? `${material.title} — CampusNotes` : 'CampusNotes — Study Material',
-    text: formattedText,
     url: shareUrl,
   };
 
@@ -350,7 +178,7 @@ async function runMockShareMaterial(material, showToast, subject, mockNav, isSec
   let copied = false;
   if (mockNav && mockNav.clipboard && isSecure) {
     try {
-      await mockNav.clipboard.writeText(formattedText);
+      await mockNav.clipboard.writeText(shareUrl);
       copied = true;
     } catch {
       copied = false;
@@ -358,15 +186,15 @@ async function runMockShareMaterial(material, showToast, subject, mockNav, isSec
   }
 
   if (copied) {
-    showToast?.('Link Copied', 'Study material details and link copied to clipboard.');
+    showToast?.('Link Copied', shareUrl);
     return true;
   } else {
-    showToast?.('Share Material', formattedText);
+    showToast?.('Share Material', shareUrl);
     return false;
   }
 }
 
-test('Mobile Web Share API sends full structured metadata, title and URL', async () => {
+test('Mobile Web Share API sends only the direct PDF URL without message text', async () => {
   const mockNav = new MockNavigator({ shareSupported: true });
   const material = {
     id: 'mat_assign_java_2',
@@ -378,22 +206,13 @@ test('Mobile Web Share API sends full structured metadata, title and URL', async
     published: true,
   };
 
-  let toastTitle = '';
-  const success = await runMockShareMaterial(
-    material,
-    (t) => { toastTitle = t; },
-    null,
-    mockNav
-  );
+  const success = await runMockShareMaterial(material, null, null, mockNav);
 
   assert.strictEqual(success, true);
   assert(mockNav.sharedData !== null);
-  assert.strictEqual(mockNav.sharedData.title, 'Assignment 2: Java Collections Framework — CampusNotes');
-  assert.strictEqual(mockNav.sharedData.url, 'https://campusnotes.dev/materials/mat_assign_java_2');
-  assert(mockNav.sharedData.text.includes('Subject: Advanced Java Programming'));
-  assert(mockNav.sharedData.text.includes('Assignment: Assignment 2'));
-  assert(mockNav.sharedData.text.includes('Unit: Unit 2'));
-  assert(mockNav.sharedData.text.includes('View PDF: https://campusnotes.dev/materials/mat_assign_java_2'));
+  assert.strictEqual(mockNav.sharedData.url, 'https://campusnotes.space/materials/mat_assign_java_2');
+  assert.strictEqual(mockNav.sharedData.text, undefined, 'Must not send text field with extra message');
+  assert.strictEqual(mockNav.sharedData.title, undefined, 'Must not send title field with extra metadata');
 });
 
 test('User cancelling native share sheet (AbortError) returns false without error toast', async () => {
@@ -419,7 +238,7 @@ test('User cancelling native share sheet (AbortError) returns false without erro
   assert.strictEqual(toastCalled, false, 'AbortError must not trigger error notifications');
 });
 
-test('Desktop / fallback copies complete formatted message and working link to clipboard', async () => {
+test('Desktop / fallback copies strictly the direct PDF URL with no extra text', async () => {
   const mockNav = new MockNavigator({ shareSupported: false, clipboardSupported: true });
   const material = {
     id: 'mat_assign_daa_1',
@@ -445,13 +264,12 @@ test('Desktop / fallback copies complete formatted message and working link to c
 
   assert.strictEqual(success, true);
   assert.strictEqual(toastTitle, 'Link Copied');
-  assert(mockNav.clipboardText !== null);
-  assert(mockNav.clipboardText.includes('CampusNotes — Study Material'));
-  assert(mockNav.clipboardText.includes('Subject: Design Analysis and Algorithms'));
-  assert(mockNav.clipboardText.includes('Assignment: Assignment 1'));
-  assert(mockNav.clipboardText.includes('Unit: Unit 1'));
-  assert(mockNav.clipboardText.includes('PDF: Assignment 1: Divide and Conquer'));
-  assert(mockNav.clipboardText.includes('View PDF: https://campusnotes.dev/materials/mat_assign_daa_1'));
+  assert.strictEqual(toastMsg, 'https://campusnotes.space/materials/mat_assign_daa_1');
+  assert.strictEqual(mockNav.clipboardText, 'https://campusnotes.space/materials/mat_assign_daa_1');
+  assert(!mockNav.clipboardText.includes('CampusNotes'), 'Must not include brand header');
+  assert(!mockNav.clipboardText.includes('Subject:'), 'Must not include Subject');
+  assert(!mockNav.clipboardText.includes('Assignment:'), 'Must not include Assignment');
+  assert(!mockNav.clipboardText.includes('\n'), 'Must be a clean single-line URL with no newlines');
 });
 
 test('Unpublished material blocks sharing and alerts user', async () => {
