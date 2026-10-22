@@ -1,15 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Upload,
   FileText,
   AlertCircle,
-  CheckCircle,
-  Hash,
-  X,
-  Layers,
-  GraduationCap,
   ExternalLink,
-  RefreshCw,
 } from 'lucide-react';
 import {
   StudyMaterial,
@@ -35,6 +29,7 @@ interface MaterialFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   subjects: Subject[];
+  semesters?: import('../../types').Semester[];
   editingMaterial?: StudyMaterial | null;
   onSuccess: () => Promise<void>;
 }
@@ -43,6 +38,7 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
   isOpen,
   onClose,
   subjects,
+  semesters = [],
   editingMaterial,
   onSuccess,
 }) => {
@@ -51,6 +47,7 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
 
   const isEdit = Boolean(editingMaterial);
 
+  const [selectedSemesterFilter, setSelectedSemesterFilter] = useState<string>('all');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [subjectId, setSubjectId] = useState('');
@@ -72,6 +69,30 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
   // Active subject object to detect laboratory courses
   const currentSubject = subjects.find((s) => s.id === subjectId) || null;
   const isSelectedLab = isLabSubject(currentSubject);
+
+  // Group subjects by semester for organized display
+  const groupedSubjects = useMemo(() => {
+    const map = new Map<number, Subject[]>();
+    for (const s of subjects) {
+      const semNum = s.semesterNumber ?? 5;
+      if (!map.has(semNum)) map.set(semNum, []);
+      map.get(semNum)!.push(s);
+    }
+    const sortedKeys = Array.from(map.keys()).sort((a, b) => a - b);
+    return sortedKeys.map((semNum) => ({
+      semesterName: `Semester ${semNum}`,
+      subjects: map.get(semNum)!,
+    }));
+  }, [subjects]);
+
+  const displayGroupedSubjects = useMemo(() => {
+    if (selectedSemesterFilter === 'all') {
+      return groupedSubjects;
+    }
+    const targetSemNum = Number(selectedSemesterFilter);
+    const filtered = groupedSubjects.filter((g) => g.semesterName === `Semester ${targetSemNum}`);
+    return filtered.length > 0 ? filtered : groupedSubjects;
+  }, [groupedSubjects, selectedSemesterFilter]);
 
   useEffect(() => {
     if (editingMaterial) {
@@ -360,8 +381,47 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
       maxWidth="2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Subject & Material Type Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Semester, Subject & Material Type Row */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">
+              Semester
+            </label>
+            <select
+              value={selectedSemesterFilter}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedSemesterFilter(val);
+                if (val !== 'all') {
+                  const targetNum = Number(val);
+                  const firstMatch = subjects.find(
+                    (s) => (s.semesterNumber ?? 5) === targetNum
+                  );
+                  if (firstMatch) {
+                    handleSubjectChange(firstMatch.id);
+                  }
+                }
+              }}
+              className="w-full text-xs sm:text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
+            >
+              <option value="all">All Semesters</option>
+              {semesters.length > 0
+                ? semesters.map((sem) => (
+                    <option key={sem.id} value={String(sem.number)}>
+                      {sem.name}
+                    </option>
+                  ))
+                : groupedSubjects.map((g) => {
+                    const num = g.semesterName.replace('Semester ', '');
+                    return (
+                      <option key={g.semesterName} value={num}>
+                        {g.semesterName}
+                      </option>
+                    );
+                  })}
+            </select>
+          </div>
+
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">
               Subject *
@@ -372,10 +432,14 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
               onChange={(e) => handleSubjectChange(e.target.value)}
               className="w-full text-xs sm:text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
             >
-              {subjects.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.code} — {s.name}
-                </option>
+              {(selectedSemesterFilter === 'all' ? groupedSubjects : displayGroupedSubjects).map((group) => (
+                <optgroup key={group.semesterName} label={group.semesterName}>
+                  {group.subjects.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.code} — {s.name}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </div>
@@ -578,13 +642,16 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
             </label>
           </div>
 
-          {selectedFile && isEdit && (
+          {selectedFile && (
             <div className="mt-1.5 flex items-center justify-between text-xs text-slate-800 bg-slate-50 px-3 py-1.5 rounded-md border border-slate-200">
-              <span>Ready to replace with: <strong>{selectedFile.name}</strong></span>
+              <span className="truncate max-w-[80%]">
+                {isEdit ? 'Ready to replace with: ' : 'Selected file: '}
+                <strong>{selectedFile.name}</strong> ({formatFileSize(selectedFile.size)})
+              </span>
               <button
                 type="button"
                 onClick={() => setSelectedFile(null)}
-                className="text-xs font-medium text-rose-600 hover:underline"
+                className="text-xs font-medium text-rose-600 hover:underline shrink-0"
               >
                 Clear Selection
               </button>

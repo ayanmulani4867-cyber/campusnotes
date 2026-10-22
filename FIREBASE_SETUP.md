@@ -36,41 +36,46 @@ To fix `PERMISSION_DENIED` and allow public access to published study materials 
   "rules": {
     "admins": {
       ".read": "auth != null",
-      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)"
+      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.token.email === 'ayanmulani4867@gmail.com' || auth.token.email === 'ayanmull8886@gmail.com' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)"
     },
     "settings": {
       ".read": true,
       "maintenanceMode": {
-        ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
+        ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.token.email === 'ayanmulani4867@gmail.com' || auth.token.email === 'ayanmull8886@gmail.com' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
         ".validate": "newData.isBoolean()"
       },
       "$other": {
-        ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)"
+        ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.token.email === 'ayanmulani4867@gmail.com' || auth.token.email === 'ayanmull8886@gmail.com' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)"
       }
     },
+    "semesters": {
+      ".read": "root.child('settings').child('maintenanceMode').val() !== true || (auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.token.email === 'ayanmulani4867@gmail.com' || auth.token.email === 'ayanmull8886@gmail.com' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true))",
+      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.token.email === 'ayanmulani4867@gmail.com' || auth.token.email === 'ayanmull8886@gmail.com' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
+      ".indexOn": ["number", "active"]
+    },
     "subjects": {
-      ".read": "root.child('settings').child('maintenanceMode').val() !== true || (auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true))",
-      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
-      ".indexOn": ["code", "active"]
+      ".read": "root.child('settings').child('maintenanceMode').val() !== true || (auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.token.email === 'ayanmulani4867@gmail.com' || auth.token.email === 'ayanmull8886@gmail.com' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true))",
+      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.token.email === 'ayanmulani4867@gmail.com' || auth.token.email === 'ayanmull8886@gmail.com' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
+      ".indexOn": ["code", "active", "semesterId", "semesterNumber"]
     },
     "categories": {
       ".read": true,
-      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)"
+      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.token.email === 'ayanmulani4867@gmail.com' || auth.token.email === 'ayanmull8886@gmail.com' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)"
     },
     "publicMaterials": {
       ".read": "root.child('settings').child('maintenanceMode').val() !== true",
-      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
+      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.token.email === 'ayanmulani4867@gmail.com' || auth.token.email === 'ayanmull8886@gmail.com' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
       ".indexOn": ["subjectId", "category", "academicYear", "createdAt"]
     },
     "materials": {
-      ".read": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
-      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
+      ".read": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.token.email === 'ayanmulani4867@gmail.com' || auth.token.email === 'ayanmull8886@gmail.com' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
+      ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.token.email === 'ayanmulani4867@gmail.com' || auth.token.email === 'ayanmull8886@gmail.com' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
       ".indexOn": ["subjectId", "category", "academicYear", "createdAt"]
     },
     "file_blobs": {
       "$blobId": {
-        ".read": "root.child('settings').child('maintenanceMode').val() !== true && (data.child('published').val() === true || (auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)))",
-        ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
+        ".read": "root.child('settings').child('maintenanceMode').val() !== true && ((data.child('material_id').exists() && root.child('publicMaterials').child(data.child('material_id').val()).exists()) || data.child('published').val() === true || (auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.token.email === 'ayanmulani4867@gmail.com' || auth.token.email === 'ayanmull8886@gmail.com' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)))",
+        ".write": "auth != null && (auth.token.email === 'admin@campusnotes.internal' || auth.token.email === 'ayanmulani4867@gmail.com' || auth.token.email === 'ayanmull8886@gmail.com' || auth.uid === 'xCyTNtjZdHPW7a51dlNGjBK3aAk1' || root.child('admins').child(auth.uid).val() === true || auth.token.admin === true)",
         ".validate": "newData.hasChildren(['blob_id', 'material_id', 'file_name', 'file_size_bytes', 'data_base64'])"
       }
     }

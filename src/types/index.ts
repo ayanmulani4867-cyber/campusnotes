@@ -104,10 +104,22 @@ export function isLabSubject(subject?: { code?: string; name?: string } | null):
   );
 }
 
+export interface Semester {
+  id: string; // e.g. "sem_5", "sem_1"
+  number: number; // e.g. 1, 2, 5, 6
+  name: string; // e.g. "Semester 5"
+  description?: string;
+  active: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface Subject {
   id: string;
   name: string;
   code: string;
+  semesterId?: string;
+  semesterNumber?: number;
   description?: string;
   active: boolean;
   createdAt: number;

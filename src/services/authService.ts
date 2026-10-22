@@ -10,6 +10,11 @@ import { auth, database, isFirebaseConfigured } from '../config/firebase';
 import { AdminUser } from '../types';
 
 export const ADMIN_CANONICAL_EMAIL = 'admin@campusnotes.internal';
+export const AUTHORIZED_ADMIN_EMAILS: readonly string[] = [
+  'admin@campusnotes.internal',
+  'ayanmulani4867@gmail.com',
+  'ayanmull8886@gmail.com',
+];
 const DEV_SESSION_STORAGE_KEY = 'cn_dev_admin_session';
 
 /**
@@ -34,8 +39,8 @@ export function resolveAdminEmail(usernameOrEmail: string): string {
  */
 export async function verifyAdminAuthorization(user: User): Promise<boolean> {
   try {
-    // 0. Canonical administrator account is always authorized
-    if (user.email === ADMIN_CANONICAL_EMAIL) {
+    // 0. Canonical administrator accounts are always authorized
+    if (user.email && AUTHORIZED_ADMIN_EMAILS.includes(user.email.toLowerCase())) {
       return true;
     }
 
@@ -57,7 +62,7 @@ export async function verifyAdminAuthorization(user: User): Promise<boolean> {
     return false;
   } catch (error) {
     console.error('Authorization verification error:', error);
-    if (user.email === ADMIN_CANONICAL_EMAIL) {
+    if (user.email && AUTHORIZED_ADMIN_EMAILS.includes(user.email.toLowerCase())) {
       return true;
     }
     return false;
@@ -69,7 +74,7 @@ export async function verifyAdminAuthorization(user: User): Promise<boolean> {
  */
 function getActiveDevSession(): AdminUser | null {
   try {
-    const raw = sessionStorage.getItem(DEV_SESSION_STORAGE_KEY);
+    const raw = sessionStorage.getItem(DEV_SESSION_STORAGE_KEY) || localStorage.getItem(DEV_SESSION_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && parsed.isAuthorizedAdmin) {
@@ -83,22 +88,24 @@ function getActiveDevSession(): AdminUser | null {
 }
 
 /**
- * Store development administrator session in sessionStorage
+ * Store development administrator session in sessionStorage and localStorage
  */
 function setDevSession(user: AdminUser): void {
   try {
     sessionStorage.setItem(DEV_SESSION_STORAGE_KEY, JSON.stringify(user));
+    localStorage.setItem(DEV_SESSION_STORAGE_KEY, JSON.stringify(user));
   } catch {
     // Ignore storage quota errors
   }
 }
 
 /**
- * Clear development administrator session from sessionStorage
+ * Clear development administrator session from sessionStorage and localStorage
  */
 function clearDevSession(): void {
   try {
     sessionStorage.removeItem(DEV_SESSION_STORAGE_KEY);
+    localStorage.removeItem(DEV_SESSION_STORAGE_KEY);
   } catch {
     // Ignore
   }

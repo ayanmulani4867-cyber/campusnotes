@@ -26,6 +26,20 @@ export const MaterialFilter: React.FC<MaterialFilterProps> = ({
 
   const academicYears = ['2026-27', '2025-26', '2024-25', '2023-24'];
 
+  const groupedSubjects = React.useMemo(() => {
+    const map = new Map<number, Subject[]>();
+    for (const s of subjects) {
+      const semNum = s.semesterNumber ?? 5;
+      if (!map.has(semNum)) map.set(semNum, []);
+      map.get(semNum)!.push(s);
+    }
+    const sortedKeys = Array.from(map.keys()).sort((a, b) => a - b);
+    return sortedKeys.map((semNum) => ({
+      semesterName: `Semester ${semNum}`,
+      subjects: map.get(semNum)!,
+    }));
+  }, [subjects]);
+
   return (
     <div className="bg-white rounded-lg border border-slate-200 p-3.5 sm:p-5 space-y-4">
       {/* 1. Primary Control: Top Search bar */}
@@ -94,10 +108,14 @@ export const MaterialFilter: React.FC<MaterialFilterProps> = ({
           className="w-full min-h-[42px] text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium"
         >
           <option value="">All Subjects</option>
-          {subjects.map((sub) => (
-            <option key={sub.id} value={sub.id}>
-              {sub.code} — {sub.name}
-            </option>
+          {groupedSubjects.map((group) => (
+            <optgroup key={group.semesterName} label={group.semesterName}>
+              {group.subjects.map((sub) => (
+                <option key={sub.id} value={sub.id}>
+                  {sub.code} — {sub.name}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
       </div>

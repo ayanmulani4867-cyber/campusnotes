@@ -1,17 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Layers,
-  BookOpen,
   ArrowRight,
-  GraduationCap,
-  Sparkles,
 } from 'lucide-react';
-import { Subject, StudyMaterial } from '../types';
+import { Subject, StudyMaterial, Semester } from '../types';
 import { OFFICIAL_CSE_SEM_5_SUBJECTS } from '../constants/subjects';
 import {
   getPublicSubjects,
   getPublicMaterials,
+  getPublicSemesters,
+  DEFAULT_SEMESTER_5,
 } from '../services/firebaseService';
 import { SubjectCardSkeleton } from '../components/common/Skeleton';
 import { EmptyState } from '../components/common/EmptyState';
@@ -24,10 +23,21 @@ export const SubjectsPage: React.FC = () => {
     if (cached && cached.length > 0) return cached;
     return OFFICIAL_CSE_SEM_5_SUBJECTS.map((s) => ({
       ...s,
+      semesterId: 'sem_5',
+      semesterNumber: 5,
       createdAt: 0,
       updatedAt: 0,
     }));
   });
+
+  const [semesters, setSemesters] = useState<Semester[]>(() => {
+    const cached = cacheService.get<Semester[]>('public_semesters');
+    if (cached && cached.length > 0) return cached;
+    return [DEFAULT_SEMESTER_5];
+  });
+
+  const [selectedSemesterId, setSelectedSemesterId] = useState<string>('all');
+
   const [materials, setMaterials] = useState<StudyMaterial[]>(() => {
     return (
       cacheService.get<StudyMaterial[]>('public_materials') ||
@@ -44,25 +54,31 @@ export const SubjectsPage: React.FC = () => {
   useEffect(() => {
     async function loadData() {
       try {
-        const [subs, mats] = await Promise.all([
+        const [subs, mats, sems] = await Promise.all([
           getPublicSubjects(),
           getPublicMaterials(150),
+          getPublicSemesters().catch(() => [DEFAULT_SEMESTER_5]),
         ]);
         const finalSubs =
           subs && subs.length > 0
             ? subs
             : OFFICIAL_CSE_SEM_5_SUBJECTS.map((s) => ({
                 ...s,
+                semesterId: 'sem_5',
+                semesterNumber: 5,
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
               }));
         setSubjects(finalSubs);
         setMaterials(mats);
+        setSemesters(sems && sems.length > 0 ? sems : [DEFAULT_SEMESTER_5]);
       } catch (err) {
         console.error('Error loading subjects:', err);
         setSubjects(
           OFFICIAL_CSE_SEM_5_SUBJECTS.map((s) => ({
             ...s,
+            semesterId: 'sem_5',
+            semesterNumber: 5,
             createdAt: Date.now(),
             updatedAt: Date.now(),
           }))
@@ -78,6 +94,13 @@ export const SubjectsPage: React.FC = () => {
     return materials.filter((m) => m.subjectId === subjectId && m.published).length;
   };
 
+  const filteredSubjects = useMemo(() => {
+    if (selectedSemesterId === 'all') return subjects;
+    return subjects.filter((s) => (s.semesterId || 'sem_5') === selectedSemesterId);
+  }, [subjects, selectedSemesterId]);
+
+  const activeSemesterObj = semesters.find((s) => s.id === selectedSemesterId);
+
   return (
     <div className="w-full max-w-7xl mx-auto min-w-0 px-3.5 sm:px-6 lg:px-8 py-6 sm:py-12 space-y-6 sm:space-y-8 box-border">
       {/* Header */}
@@ -87,12 +110,52 @@ export const SubjectsPage: React.FC = () => {
           <span>Curriculum Structure</span>
         </div>
         <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-900 break-words">
-          CSE Semester 5 Subjects
+          {selectedSemesterId === 'all'
+            ? 'Curriculum Subjects'
+            : `${activeSemesterObj?.name || 'Curriculum'} Subjects`}
         </h1>
         <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl">
-          Comprehensive curriculum subjects for Computer Science & Engineering 5th semester. Explore verified study notes, practical files, and previous year exam questions.
+          {selectedSemesterId === 'all'
+            ? 'Comprehensive curriculum subjects for engineering students. Explore verified study notes, practical files, and previous year exam questions.'
+            : `Curriculum subjects and verified study materials for ${activeSemesterObj?.name || 'this semester'}.`}
         </p>
       </div>
+
+      {/* Semester Filter Tabs */}
+      {semesters.length > 1 && (
+        <div className="w-full max-w-full min-w-0 overflow-x-auto pb-1 no-scrollbar touch-pan-x">
+          <div className="inline-flex items-center gap-1.5 min-w-max">
+            <button
+              type="button"
+              onClick={() => setSelectedSemesterId('all')}
+              className={`min-h-[36px] px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors border ${
+                selectedSemesterId === 'all'
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              All Semesters
+            </button>
+            {semesters.map((sem) => {
+              const isSelected = selectedSemesterId === sem.id;
+              return (
+                <button
+                  key={sem.id}
+                  type="button"
+                  onClick={() => setSelectedSemesterId(isSelected ? 'all' : sem.id)}
+                  className={`min-h-[36px] px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors border ${
+                    isSelected
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {sem.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Subjects Grid */}
       {loading ? (
@@ -104,17 +167,25 @@ export const SubjectsPage: React.FC = () => {
           <SubjectCardSkeleton />
           <SubjectCardSkeleton />
         </div>
-      ) : subjects.length === 0 ? (
+      ) : filteredSubjects.length === 0 ? (
         <EmptyState
           title="No Subjects Available"
-          description="Official subjects have not been configured in the database yet. The administrator can initialize them from the Admin Portal."
+          description={
+            selectedSemesterId === 'all'
+              ? 'Official subjects have not been configured in the database yet. The administrator can initialize them from the Admin Portal.'
+              : `No subjects have been configured for ${activeSemesterObj?.name || 'this semester'} yet.`
+          }
           actionText="Admin Portal"
           actionTo="/admin/login"
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 w-full max-w-full min-w-0">
-          {subjects.map((sub) => {
+          {filteredSubjects.map((sub) => {
             const count = getMaterialCountForSubject(sub.id);
+            const semDisplay =
+              semesters.find((s) => s.id === (sub.semesterId || 'sem_5'))?.name ||
+              `Semester ${sub.semesterNumber || 5}`;
+
             return (
               <Link
                 key={sub.id}
@@ -123,9 +194,14 @@ export const SubjectsPage: React.FC = () => {
               >
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-3">
-                    <span className="font-mono text-xs font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                      {sub.code}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-xs font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                        {sub.code}
+                      </span>
+                      <span className="text-[11px] font-medium text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                        {semDisplay}
+                      </span>
+                    </div>
                     <span className="text-xs font-normal text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
                       {count} {count === 1 ? 'Material' : 'Materials'}
                     </span>
@@ -137,7 +213,7 @@ export const SubjectsPage: React.FC = () => {
 
                   <p className="text-xs text-slate-500 mt-2 line-clamp-3 leading-relaxed break-words">
                     {sub.description ||
-                      'Standard university curriculum course for Computer Science and Engineering 5th Semester.'}
+                      'Standard university curriculum course for Computer Science and Engineering.'}
                   </p>
                 </div>
 

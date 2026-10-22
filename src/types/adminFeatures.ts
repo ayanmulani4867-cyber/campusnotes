@@ -79,7 +79,10 @@ export type AdminActionType =
   | 'ADMIN_PASSWORD_CHANGE'
   | 'SUBJECT_CREATE'
   | 'SUBJECT_UPDATE'
-  | 'SUBJECT_DELETE';
+  | 'SUBJECT_DELETE'
+  | 'SEMESTER_CREATE'
+  | 'SEMESTER_UPDATE'
+  | 'SEMESTER_DELETE';
 
 export interface AdminActivityRecord {
   id: string;

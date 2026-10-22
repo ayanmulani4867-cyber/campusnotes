@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
-  ShieldCheck,
   LogOut,
   Plus,
   Search,
@@ -10,9 +9,6 @@ import {
   Edit2,
   Trash2,
   RefreshCw,
-  ExternalLink,
-  AlertCircle,
-  AlertTriangle,
   Key,
   Wrench,
   Upload,
@@ -33,6 +29,7 @@ import { useToast } from '../../context/ToastContext';
 import {
   StudyMaterial,
   Subject,
+  Semester,
   DashboardStats,
   AcademicCategory,
   MATERIAL_TYPE_OPTIONS,
@@ -41,6 +38,7 @@ import {
 import {
   getAllMaterialsAdmin,
   getAllSubjectsAdmin,
+  getAllSemestersAdmin,
   togglePublishMaterial,
   deleteMaterial,
   getMaintenanceMode,
@@ -60,9 +58,10 @@ import { activityLogService } from '../../services/activityLogService';
 
 type AdminTab =
   | 'dashboard'
+  | 'semesters'
+  | 'subjects'
   | 'materials'
   | 'upload'
-  | 'subjects'
   | 'analytics'
   | 'activity'
   | 'health'
@@ -77,6 +76,7 @@ export const AdminDashboardPage: React.FC = () => {
 
   const [materials, setMaterials] = useState<StudyMaterial[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [semesters, setSemesters] = useState<Semester[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -86,6 +86,7 @@ export const AdminDashboardPage: React.FC = () => {
 
   // Filters for materials table
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterSemester, setFilterSemester] = useState('');
   const [filterSubject, setFilterSubject] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all'); // all, published, drafts
@@ -98,6 +99,7 @@ export const AdminDashboardPage: React.FC = () => {
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
   // Inline Upload Form state
+  const [uploadSemesterId, setUploadSemesterId] = useState('');
   const [uploadSubjectId, setUploadSubjectId] = useState('');
   const [uploadType, setUploadType] = useState<AcademicCategory>('notes');
   const [uploadTitle, setUploadTitle] = useState('');
@@ -156,15 +158,20 @@ export const AdminDashboardPage: React.FC = () => {
   const refreshData = async () => {
     try {
       setLoading(true);
-      const [mats, subs, maint] = await Promise.all([
+      const [mats, subs, sems, maint] = await Promise.all([
         getAllMaterialsAdmin(),
         getAllSubjectsAdmin(),
+        getAllSemestersAdmin(),
         getMaintenanceMode().catch(() => false),
       ]);
       setMaterials(mats);
       setSubjects(subs);
+      setSemesters(sems);
       setMaintenanceModeState(maint);
 
+      if (!uploadSemesterId && sems.length > 0) {
+        setUploadSemesterId(sems[0].id);
+      }
       if (!uploadSubjectId && subs.length > 0) {
         setUploadSubjectId(subs[0].id);
       }
@@ -174,6 +181,39 @@ export const AdminDashboardPage: React.FC = () => {
       setLoading(false);
     }
   };
+
+  const groupedSubjects = useMemo(() => {
+    const groups: { semesterName: string; subjects: Subject[] }[] = [];
+    const semMap = new Map<string, string>();
+    for (const sem of semesters) {
+      semMap.set(sem.id, sem.name);
+    }
+    const map = new Map<string, Subject[]>();
+    for (const s of subjects) {
+      const sId = s.semesterId || 'sem_5';
+      if (!map.has(sId)) {
+        map.set(sId, []);
+      }
+      map.get(sId)!.push(s);
+    }
+    for (const sem of semesters) {
+      if (map.has(sem.id)) {
+        groups.push({
+          semesterName: sem.name,
+          subjects: map.get(sem.id)!,
+        });
+        map.delete(sem.id);
+      }
+    }
+    for (const [sId, subs] of map.entries()) {
+      const name = semMap.get(sId) || (sId === 'sem_5' ? 'Semester 5' : sId);
+      groups.push({
+        semesterName: name,
+        subjects: subs,
+      });
+    }
+    return groups;
+  }, [subjects, semesters]);
 
   useEffect(() => {
     refreshData();
@@ -492,6 +532,14 @@ export const AdminDashboardPage: React.FC = () => {
   const filteredMaterials = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return materials.filter((m) => {
+      const sub = subjects.find((s) => s.id === m.subjectId);
+      if (filterSemester) {
+        const targetSem = semesters.find((sem) => sem.id === filterSemester);
+        const subSemId = sub?.semesterId || (sub?.semesterNumber ? `sem_${sub.semesterNumber}` : 'sem_5');
+        const matchesSemId = subSemId === filterSemester;
+        const matchesSemNum = targetSem && (sub?.semesterNumber ?? 5) === targetSem.number;
+        if (!matchesSemId && !matchesSemNum) return false;
+      }
       if (filterSubject && m.subjectId !== filterSubject) return false;
       if (filterType && m.category !== filterType) return false;
       if (filterStatus === 'published' && !m.published) return false;
@@ -501,7 +549,6 @@ export const AdminDashboardPage: React.FC = () => {
         const matchTitle = m.title.toLowerCase().includes(q);
         const matchDesc = (m.description || '').toLowerCase().includes(q);
         const matchFile = (m.fileName || '').toLowerCase().includes(q);
-        const sub = subjects.find((s) => s.id === m.subjectId);
         const matchSub = sub
           ? sub.name.toLowerCase().includes(q) || sub.code.toLowerCase().includes(q)
           : false;
@@ -510,7 +557,7 @@ export const AdminDashboardPage: React.FC = () => {
       }
       return true;
     });
-  }, [materials, searchQuery, filterSubject, filterType, filterStatus, subjects]);
+  }, [materials, searchQuery, filterSemester, filterSubject, filterType, filterStatus, subjects, semesters]);
 
   const recentMaterials = useMemo(() => {
     return [...materials]
@@ -521,17 +568,22 @@ export const AdminDashboardPage: React.FC = () => {
   const navItems = [
     { id: 'dashboard' as AdminTab, label: 'Dashboard', icon: LayoutDashboard },
     {
-      id: 'materials' as AdminTab,
-      label: 'All Materials',
-      icon: FileText,
-      count: materials.length,
+      id: 'semesters' as AdminTab,
+      label: 'Manage Semesters',
+      icon: Layers,
+      count: semesters.length,
     },
-    { id: 'upload' as AdminTab, label: 'Upload Material', icon: Upload },
     {
       id: 'subjects' as AdminTab,
-      label: 'Subjects',
+      label: 'Manage Subjects',
       icon: BookOpen,
       count: subjects.length,
+    },
+    {
+      id: 'materials' as AdminTab,
+      label: 'Manage Study Materials',
+      icon: FileText,
+      count: materials.length,
     },
     {
       id: 'analytics' as AdminTab,
@@ -838,6 +890,14 @@ export const AdminDashboardPage: React.FC = () => {
 
                 <button
                   type="button"
+                  onClick={() => setActiveTab('semesters')}
+                  className="px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors"
+                >
+                  <span>Manage Semesters</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setActiveTab('subjects')}
                   className="px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors"
                 >
@@ -1015,7 +1075,7 @@ export const AdminDashboardPage: React.FC = () => {
 
             {/* Simple Filters Row */}
             <div className="bg-white p-3.5 rounded-lg border border-slate-200 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
                 <div className="relative">
                   <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
@@ -1028,16 +1088,42 @@ export const AdminDashboardPage: React.FC = () => {
                 </div>
 
                 <select
+                  value={filterSemester}
+                  onChange={(e) => {
+                    setFilterSemester(e.target.value);
+                    setFilterSubject('');
+                  }}
+                  className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 font-medium focus:ring-2 focus:ring-blue-600"
+                >
+                  <option value="">All Semesters</option>
+                  {semesters.map((sem) => (
+                    <option key={sem.id} value={sem.id}>
+                      {sem.name}
+                    </option>
+                  ))}
+                </select>
+
+                <select
                   value={filterSubject}
                   onChange={(e) => setFilterSubject(e.target.value)}
                   className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 font-medium focus:ring-2 focus:ring-blue-600"
                 >
                   <option value="">All Subjects</option>
-                  {subjects.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.code} — {s.name}
-                    </option>
-                  ))}
+                  {groupedSubjects
+                    .filter((group) => {
+                      if (!filterSemester) return true;
+                      const targetSem = semesters.find((s) => s.id === filterSemester);
+                      return targetSem ? group.semesterName === targetSem.name : true;
+                    })
+                    .map((group) => (
+                      <optgroup key={group.semesterName} label={group.semesterName}>
+                        {group.subjects.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.code} — {s.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
                 </select>
 
                 <select
@@ -1064,11 +1150,12 @@ export const AdminDashboardPage: React.FC = () => {
                 </select>
               </div>
 
-              {(filterSubject || filterType || filterStatus !== 'all' || searchQuery) && (
+              {(filterSemester || filterSubject || filterType || filterStatus !== 'all' || searchQuery) && (
                 <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
                   <button
                     type="button"
                     onClick={() => {
+                      setFilterSemester('');
                       setFilterSubject('');
                       setFilterType('');
                       setFilterStatus('all');
@@ -1330,8 +1417,40 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleInlineUploadSubmit} className="space-y-4">
-              {/* 2-column grid on desktop for Subject & Material Type */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* 3-column grid on desktop for Semester, Subject & Material Type */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Semester
+                  </label>
+                  <select
+                    value={uploadSemesterId}
+                    onChange={(e) => {
+                      const semId = e.target.value;
+                      setUploadSemesterId(semId);
+                      if (semId) {
+                        const targetSem = semesters.find((s) => s.id === semId);
+                        const firstSub = subjects.find(
+                          (s) =>
+                            (s.semesterId && s.semesterId === semId) ||
+                            (targetSem && (s.semesterNumber ?? 5) === targetSem.number)
+                        );
+                        if (firstSub) {
+                          handleUploadSubjectChange(firstSub.id);
+                        }
+                      }
+                    }}
+                    className="w-full text-xs sm:text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
+                  >
+                    <option value="">All Semesters</option>
+                    {semesters.map((sem) => (
+                      <option key={sem.id} value={sem.id}>
+                        {sem.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">
                     Subject *
@@ -1342,11 +1461,21 @@ export const AdminDashboardPage: React.FC = () => {
                     onChange={(e) => handleUploadSubjectChange(e.target.value)}
                     className="w-full text-xs sm:text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
                   >
-                    {subjects.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.code} — {s.name}
-                      </option>
-                    ))}
+                    {groupedSubjects
+                      .filter((group) => {
+                        if (!uploadSemesterId) return true;
+                        const targetSem = semesters.find((s) => s.id === uploadSemesterId);
+                        return targetSem ? group.semesterName === targetSem.name : true;
+                      })
+                      .map((group) => (
+                        <optgroup key={group.semesterName} label={group.semesterName}>
+                          {group.subjects.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.code} — {s.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
                   </select>
                 </div>
 
@@ -1480,7 +1609,10 @@ export const AdminDashboardPage: React.FC = () => {
               {uploadProgress !== null && (
                 <div className="space-y-1.5 p-3 bg-slate-50 rounded-lg border border-slate-200">
                   <div className="flex items-center justify-between text-xs font-medium text-slate-800">
-                    <span>Uploading PDF to Realtime Database...</span>
+                    <span>
+                      Uploading PDF...{' '}
+                      {uploadTotalBytes > 0 && `(${formatFileSize(uploadBytesTransferred)} / ${formatFileSize(uploadTotalBytes)})`}
+                    </span>
                     <span>{uploadProgress}%</span>
                   </div>
                   <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
@@ -1537,13 +1669,40 @@ export const AdminDashboardPage: React.FC = () => {
         )}
 
         {/* ============================================================== */}
-        {/* 4. SUBJECTS TAB                                                */}
+        {/* 4. MANAGE SEMESTERS TAB                                        */}
+        {/* ============================================================== */}
+        {activeTab === 'semesters' && (
+          <SubjectManager
+            activeSection="semesters"
+            subjects={subjects}
+            semesters={semesters}
+            materials={materials}
+            onRefresh={refreshData}
+            loading={loading}
+            onNavigateToSubjects={() => setActiveTab('subjects')}
+            onNavigateToMaterials={(subId) => {
+              setFilterSubject(subId);
+              setActiveTab('materials');
+            }}
+          />
+        )}
+
+        {/* ============================================================== */}
+        {/* 5. MANAGE SUBJECTS TAB                                         */}
         {/* ============================================================== */}
         {activeTab === 'subjects' && (
           <SubjectManager
+            activeSection="subjects"
             subjects={subjects}
+            semesters={semesters}
+            materials={materials}
             onRefresh={refreshData}
             loading={loading}
+            onNavigateToSubjects={() => setActiveTab('subjects')}
+            onNavigateToMaterials={(subId) => {
+              setFilterSubject(subId);
+              setActiveTab('materials');
+            }}
           />
         )}
 
@@ -1631,6 +1790,7 @@ export const AdminDashboardPage: React.FC = () => {
         isOpen={Boolean(editingMaterial)}
         onClose={() => setEditingMaterial(null)}
         subjects={subjects}
+        semesters={semesters}
         editingMaterial={editingMaterial}
         onSuccess={async () => {
           await refreshData();

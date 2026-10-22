@@ -228,7 +228,7 @@ export const SubjectDetailPage: React.FC = () => {
                 {subject?.code}
               </span>
               <span className="text-[11px] sm:text-xs font-medium text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-md border border-slate-200 shrink-0">
-                CSE Semester 5
+                Semester {subject?.semesterNumber ?? 5}
               </span>
               <span className="text-[11px] sm:text-xs font-semibold text-slate-700 bg-slate-50 px-2.5 py-0.5 rounded-md border border-slate-200 shrink-0">
                 {materials.length} Published {materials.length === 1 ? 'Resource' : 'Resources'}
