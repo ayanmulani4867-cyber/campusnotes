@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build && node scripts/copy-404.mjs",
     "lint": "oxlint",
-    "test": "node scripts/test-full-card-and-perf.mjs && node scripts/test-metadata-share.mjs && node scripts/test-mobile-and-share.mjs && node scripts/test-maintenance-guard-and-no-flash.mjs && node scripts/verify-three-pdf-cards-share.mjs && node scripts/test-dynamic-semesters.mjs && node scripts/test-inactive-semester-visibility.mjs && node scripts/test-private-assignment-sharing.mjs && node scripts/test-all-file-formats.mjs && node scripts/test-sharing-bug-fix.mjs",
+    "test": "node scripts/test-full-card-and-perf.mjs && node scripts/test-metadata-share.mjs && node scripts/test-mobile-and-share.mjs && node scripts/test-maintenance-guard-and-no-flash.mjs && node scripts/verify-three-pdf-cards-share.mjs && node scripts/test-dynamic-semesters.mjs && node scripts/test-inactive-semester-visibility.mjs && node scripts/test-all-file-formats.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

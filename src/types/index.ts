@@ -189,5 +189,4 @@ export interface DashboardStats {
 }
 
 export * from './adminFeatures';
-export * from './privateShare';
 

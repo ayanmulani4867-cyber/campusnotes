@@ -1,5 +1,12 @@
 // CampusNotes Multi-Format File Support & Safe MIME Type Utilities
-import type { FileFormatInfo } from '../types/privateShare';
+
+export interface FileFormatInfo {
+  extension: string;
+  mimeType: string;
+  category: 'document' | 'presentation' | 'spreadsheet' | 'image' | 'archive' | 'other';
+  label: string;
+  previewable: boolean;
+}
 
 export const SUPPORTED_FILE_FORMATS: Record<string, FileFormatInfo> = {
   // Documents

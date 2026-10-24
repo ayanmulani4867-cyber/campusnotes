@@ -78,12 +78,9 @@ export const MaintenanceGuard: React.FC<MaintenanceGuardProps> = ({ children }) 
   }, []);
 
   const isAdminRoute = location.pathname.startsWith('/admin');
-  const isPrivateShareRoute =
-    location.pathname.startsWith('/private-assignment') ||
-    location.pathname.startsWith('/private-share');
 
-  // Guard 1: Authorized administrator routes and direct private share links are always accessible
-  if (isAdminRoute || isPrivateShareRoute) {
+  // Guard 1: Authorized administrator routes are always accessible
+  if (isAdminRoute) {
     return <>{children}</>;
   }
 
