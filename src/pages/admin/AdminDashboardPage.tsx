@@ -21,6 +21,7 @@ import {
   BarChart3,
   History,
   HeartPulse,
+  Share2,
 } from 'lucide-react';
 import { updateAdminPassword } from '../../services/authService';
 import { Modal } from '../../components/common/Modal';
@@ -48,9 +49,15 @@ import {
   MAX_FILE_SIZE_BYTES,
 } from '../../services/firebaseService';
 import { formatFileSize } from '../../components/materials/MaterialCard';
+import {
+  validateClientFile,
+  ACCEPTED_FILE_EXTENSIONS,
+} from '../../utils/fileTypes';
 import { SubjectManager } from '../../components/admin/SubjectManager';
 import { MaterialFormModal } from '../../components/admin/MaterialFormModal';
 import { ReplacePdfModal } from '../../components/admin/ReplacePdfModal';
+import { SharePrivatelyModal } from '../../components/admin/SharePrivatelyModal';
+import { PrivateSharesManagement } from '../../components/admin/PrivateSharesManagement';
 import { VisitorAnalyticsSection } from '../../components/admin/VisitorAnalyticsSection';
 import { AdminActivityLogSection } from '../../components/admin/AdminActivityLogSection';
 import { WebsiteHealthSection } from '../../components/admin/WebsiteHealthSection';
@@ -93,6 +100,8 @@ export const AdminDashboardPage: React.FC = () => {
   // Modals state
   const [editingMaterial, setEditingMaterial] = useState<StudyMaterial | null>(null);
   const [replacingMaterial, setReplacingMaterial] = useState<StudyMaterial | null>(null);
+  const [sharingMaterial, setSharingMaterial] = useState<StudyMaterial | null>(null);
+  const [materialsSubTab, setMaterialsSubTab] = useState<'catalog' | 'privateShares'>('catalog');
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
@@ -392,22 +401,13 @@ export const AdminDashboardPage: React.FC = () => {
     setUploadType(newType);
   };
 
-  const handleUploadFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUploadFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-      toast.error('Invalid File Type', 'Only PDF files (.pdf) are permitted.');
-      e.target.value = '';
-      setUploadFile(null);
-      return;
-    }
-
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      toast.error(
-        'File Exceeds Limit',
-        `File size (${formatFileSize(file.size)}) exceeds maximum allowed size of 6 MB for Realtime Database storage.`
-      );
+    const validation = await validateClientFile(file, MAX_FILE_SIZE_BYTES);
+    if (!validation.valid) {
+      toast.error('Invalid File', validation.error || 'The selected file format is not supported.');
       e.target.value = '';
       setUploadFile(null);
       return;
@@ -428,7 +428,7 @@ export const AdminDashboardPage: React.FC = () => {
       return;
     }
     if (!uploadFile) {
-      toast.error('Validation Error', 'Please select a PDF document to upload.');
+      toast.error('Validation Error', 'Please select a study material file to upload.');
       return;
     }
     if (isUploadLab && uploadType === 'assignments') {
@@ -467,6 +467,7 @@ export const AdminDashboardPage: React.FC = () => {
         experimentNumber: uploadType === 'experiments' ? parsedNum : null,
         unitNumber: uploadType === 'notes' ? parsedNum : null,
         fileName: uploadResult.fileName,
+        mimeType: uploadResult.mimeType,
         storagePath: uploadResult.storagePath,
         downloadUrl: uploadResult.downloadUrl,
         blobId: uploadResult.blobId,
@@ -1032,13 +1033,24 @@ export const AdminDashboardPage: React.FC = () => {
                               </span>
                             </td>
                             <td className="py-2.5 px-4 text-right">
-                              <button
-                                type="button"
-                                onClick={() => setEditingMaterial(mat)}
-                                className="text-xs font-medium text-slate-700 hover:text-blue-600 px-2.5 py-1 rounded border border-slate-200 bg-white hover:bg-slate-50 transition-colors"
-                              >
-                                Edit
-                              </button>
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setSharingMaterial(mat)}
+                                  className="text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded border border-blue-200 transition-colors inline-flex items-center gap-1"
+                                  title="Share Privately"
+                                >
+                                  <Share2 className="w-3 h-3 text-blue-600" />
+                                  <span>Share Privately</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingMaterial(mat)}
+                                  className="text-xs font-medium text-slate-700 hover:text-blue-600 px-2.5 py-1 rounded border border-slate-200 bg-white hover:bg-slate-50 transition-colors"
+                                >
+                                  Edit
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -1058,9 +1070,9 @@ export const AdminDashboardPage: React.FC = () => {
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
               <div>
-                <h2 className="text-xl font-bold text-slate-900 tracking-tight">All Materials</h2>
+                <h2 className="text-xl font-bold text-slate-900 tracking-tight">Study Materials</h2>
                 <p className="text-xs text-slate-500">
-                  Manage, filter, edit details, and replace PDFs across {materials.length} curriculum documents.
+                  Manage, filter, edit details, and privately share curriculum documents.
                 </p>
               </div>
 
@@ -1074,6 +1086,46 @@ export const AdminDashboardPage: React.FC = () => {
               </button>
             </div>
 
+            {/* Sub-tab pills: All Materials vs Private Shares */}
+            <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+              <button
+                type="button"
+                onClick={() => setMaterialsSubTab('catalog')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 ${
+                  materialsSubTab === 'catalog'
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>All Materials ({materials.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMaterialsSubTab('privateShares')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 ${
+                  materialsSubTab === 'privateShares'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>Private Shares</span>
+              </button>
+            </div>
+
+            {materialsSubTab === 'privateShares' ? (
+              <PrivateSharesManagement
+                onOpenCreateShare={() => {
+                  setMaterialsSubTab('catalog');
+                  toast.info(
+                    'Select a Material to Share',
+                    'Click "Share Privately" next to any material in the table below to generate a private link.'
+                  );
+                }}
+              />
+            ) : (
+              <>
             {/* Simple Filters Row */}
             <div className="bg-white p-3.5 rounded-lg border border-slate-200 space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
@@ -1272,6 +1324,16 @@ export const AdminDashboardPage: React.FC = () => {
                               <div className="flex items-center justify-end gap-1.5">
                                 <button
                                   type="button"
+                                  onClick={() => setSharingMaterial(mat)}
+                                  className="px-2.5 py-1 rounded-md text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 transition-colors inline-flex items-center gap-1.5"
+                                  title="Share Privately without recipient login"
+                                >
+                                  <Share2 className="w-3 h-3 text-blue-600" />
+                                  <span>Share Privately</span>
+                                </button>
+
+                                <button
+                                  type="button"
                                   onClick={() => setEditingMaterial(mat)}
                                   className="px-2.5 py-1 rounded-md text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors inline-flex items-center gap-1.5"
                                 >
@@ -1374,6 +1436,15 @@ export const AdminDashboardPage: React.FC = () => {
                       <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
                         <button
                           type="button"
+                          onClick={() => setSharingMaterial(mat)}
+                          className="flex-1 min-h-[40px] inline-flex items-center justify-center py-2 px-2 bg-blue-50 text-blue-700 hover:bg-blue-100 active:bg-blue-200 rounded-lg text-xs font-semibold border border-blue-200 text-center gap-1.5"
+                        >
+                          <Share2 className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Share Privately</span>
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() => setEditingMaterial(mat)}
                           className="flex-1 min-h-[40px] inline-flex items-center justify-center py-2 px-2 bg-white text-slate-700 hover:bg-slate-50 active:bg-slate-100 rounded-lg text-xs font-semibold border border-slate-200 text-center"
                         >
@@ -1402,6 +1473,8 @@ export const AdminDashboardPage: React.FC = () => {
                 })
               )}
             </div>
+              </>
+            )}
           </div>
         )}
 
@@ -1567,16 +1640,16 @@ export const AdminDashboardPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* PDF File Upload */}
+              {/* Study Material File Upload */}
               <div>
                 <label className="block text-xs font-medium text-slate-700 mb-1">
-                  PDF File (Max 25 MB) *
+                  Study Material File (Max 50 MB) *
                 </label>
                 <div className="border border-dashed border-slate-300 rounded-lg p-5 text-center bg-white hover:border-slate-400 transition-colors">
                   <input
                     type="file"
                     id="inline-pdf-upload"
-                    accept=".pdf,application/pdf"
+                    accept={ACCEPTED_FILE_EXTENSIONS}
                     onChange={handleUploadFileChange}
                     className="hidden"
                     disabled={isUploading}
@@ -1584,10 +1657,10 @@ export const AdminDashboardPage: React.FC = () => {
                   <label htmlFor="inline-pdf-upload" className="cursor-pointer block">
                     <Upload className="w-5 h-5 text-slate-400 mx-auto mb-1.5" />
                     <p className="text-xs font-medium text-slate-800">
-                      {uploadFile ? `Selected: ${uploadFile.name}` : 'Click to select a PDF from your computer'}
+                      {uploadFile ? `Selected: ${uploadFile.name}` : 'Click to select a file from your computer'}
                     </p>
                     <p className="text-[11px] text-slate-400 mt-0.5">
-                      {uploadFile ? `Size: ${formatFileSize(uploadFile.size)}` : 'Accepts .pdf files only, up to 6 MB for Realtime Database storage'}
+                      {uploadFile ? `Size: ${formatFileSize(uploadFile.size)}` : 'Supports PDF, Word, Excel, PowerPoint, Text, RTF, Images, and ZIP archives'}
                     </p>
                   </label>
                 </div>
@@ -1611,7 +1684,7 @@ export const AdminDashboardPage: React.FC = () => {
                 <div className="space-y-1.5 p-3 bg-slate-50 rounded-lg border border-slate-200">
                   <div className="flex items-center justify-between text-xs font-medium text-slate-800">
                     <span>
-                      Uploading PDF...{' '}
+                      Uploading file...{' '}
                       {uploadTotalBytes > 0 && `(${formatFileSize(uploadBytesTransferred)} / ${formatFileSize(uploadTotalBytes)})`}
                     </span>
                     <span>{uploadProgress}%</span>
@@ -1805,6 +1878,12 @@ export const AdminDashboardPage: React.FC = () => {
         onSuccess={async () => {
           await refreshData();
         }}
+      />
+
+      <SharePrivatelyModal
+        isOpen={Boolean(sharingMaterial)}
+        onClose={() => setSharingMaterial(null)}
+        material={sharingMaterial}
       />
 
       <Modal

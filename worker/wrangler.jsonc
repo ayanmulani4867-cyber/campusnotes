@@ -13,6 +13,6 @@
   "vars": {
     "FIREBASE_PROJECT_ID": "campusnotes-e62cf",
     "FIREBASE_DATABASE_URL": "https://campusnotes-e62cf-default-rtdb.firebaseio.com",
-    "ALLOWED_ORIGINS": "https://campusnotes-ifpr.onrender.com,http://localhost:5173,http://localhost:4173,http://localhost:3000"
+    "ALLOWED_ORIGINS": "https://campusnotes.space,https://www.campusnotes.space,https://campusnotes-ifpr.onrender.com,http://localhost:5173,http://localhost:4173,http://localhost:3000"
   }
 }

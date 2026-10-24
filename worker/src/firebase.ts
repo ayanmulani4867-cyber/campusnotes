@@ -17,6 +17,14 @@ export function invalidatePublicMaterialCache(materialId?: string): void {
   }
 }
 
+export function setCachedPublicMaterial(
+  materialId: string,
+  record: PublicMaterialRecord | null,
+  ttlMs = PUBLIC_METADATA_TTL_MS
+): void {
+  publicMetadataCache.set(materialId, { record, expires: Date.now() + ttlMs });
+}
+
 /**
  * Reads public material metadata from the public RTDB partition.
  * Subject to Firebase security rule: root.child('settings').child('maintenanceMode').val() !== true.

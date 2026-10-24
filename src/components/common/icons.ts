@@ -114,8 +114,15 @@ const Wrench = /* @__PURE__ */ createLucideIcon('wrench', [["path",{"d":"M14.7 6
 const X = /* @__PURE__ */ createLucideIcon('x', [["path",{"d":"M18 6 6 18","key":"1bl5f8"}],["path",{"d":"m6 6 12 12","key":"d8bk6v"}]]);
 const CircleX = /* @__PURE__ */ createLucideIcon('circle-x', [["circle",{"cx":"12","cy":"12","r":"10","key":"1mglay"}],["path",{"d":"m15 9-6 6","key":"1uzhvr"}],["path",{"d":"m9 9 6 6","key":"z0biqf"}]]);
 const Zap = /* @__PURE__ */ createLucideIcon('zap', [["path",{"d":"M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z","key":"1v7up4"}]]);
+const Ban = /* @__PURE__ */ createLucideIcon('ban', [["circle",{"cx":"12","cy":"12","r":"10","key":"1mglay"}],["path",{"d":"m4.9 4.9 14.2 14.2","key":"1m5hkf"}]]);
+const Mail = /* @__PURE__ */ createLucideIcon('mail', [["rect",{"width":"20","height":"16","x":"2","y":"4","rx":"2","key":"18nhru"}],["path",{"d":"m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7","key":"1ocrg3"}]]);
+const MessageCircle = /* @__PURE__ */ createLucideIcon('message-circle', [["path",{"d":"M7.9 20A9 9 0 1 0 4 16.1L2 22Z","key":"vv11sd"}]]);
+const Image = /* @__PURE__ */ createLucideIcon('image', [["rect",{"width":"18","height":"18","x":"3","y":"3","rx":"2","ry":"2","key":"1m30ak"}],["circle",{"cx":"9","cy":"9","r":"2","key":"af1f0g"}],["path",{"d":"m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21","key":"1xmnt7"}]]);
+const FileArchive = /* @__PURE__ */ createLucideIcon('file-archive', [["path",{"d":"M10 12v-1","key":"17s927"}],["path",{"d":"M10 18v-2","key":"16757x"}],["path",{"d":"M10 7V6","key":"18l98e"}],["path",{"d":"M14 2v4a2 2 0 0 0 2 2h4","key":"120689"}],["path",{"d":"M15.5 22H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h10l6 6v10a2 2 0 0 1-2 2h-2.5","key":"2j275u"}],["circle",{"cx":"10","cy":"20","r":"2","key":"13v4t6"}]]);
+const FileSpreadsheet = /* @__PURE__ */ createLucideIcon('file-spreadsheet', [["path",{"d":"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z","key":"19oxwf"}],["path",{"d":"M14 2v4a2 2 0 0 0 2 2h4","key":"120689"}],["path",{"d":"M8 13h2","key":"1d7x6q"}],["path",{"d":"M14 13h2","key":"151c7l"}],["path",{"d":"M8 17h2","key":"1ox01g"}],["path",{"d":"M14 17h2","key":"4e8o4l"}]]);
+const Presentation = /* @__PURE__ */ createLucideIcon('presentation', [["path",{"d":"M2 3h20","key":"91anec"}],["path",{"d":"M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3","key":"yuxw41"}],["path",{"d":"m7 21 5-5 5 5","key":"16v182"}]]);
 
-// Export all 64 icons matching project imports:
+// Export all icons matching project imports:
 export {
   Activity,
   CircleAlert as AlertCircle,
@@ -123,6 +130,7 @@ export {
   ArrowLeft,
   ArrowRight,
   ArrowUpRight,
+  Ban,
   ChartColumn as BarChart3,
   BookOpen,
   Calendar,
@@ -140,8 +148,10 @@ export {
   Pen as Edit2,
   ExternalLink,
   Eye,
+  FileArchive,
   FileCheck,
   FileQuestionMark as FileQuestion,
+  FileSpreadsheet,
   FileText,
   Funnel as Filter,
   FlaskConical,
@@ -154,6 +164,7 @@ export {
   CircleQuestionMark as HelpCircle,
   RotateCcwClock as History,
   House as Home,
+  Image,
   Info,
   Key,
   Laptop,
@@ -161,8 +172,11 @@ export {
   LayoutDashboard,
   Lock,
   LogOut,
+  Mail,
   Menu,
+  MessageCircle,
   Plus,
+  Presentation,
   RefreshCw,
   RotateCcw,
   Search,

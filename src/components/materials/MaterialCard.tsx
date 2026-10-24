@@ -17,6 +17,7 @@ import { downloadStudyMaterial } from '../../services/firebaseService';
 import { shareMaterial } from '../../utils/shareUtils';
 import { useToast } from '../../context/ToastContext';
 import { prefetchRoute } from '../../utils/routePrefetch';
+import { getFileExtension } from '../../utils/fileTypes';
 
 interface MaterialCardProps {
   material: StudyMaterial;
@@ -214,9 +215,12 @@ export const MaterialCard: React.FC<MaterialCardProps> = React.memo(({
       {/* Footer Info & Actions */}
       <div className="mt-5 pt-3.5 border-t border-slate-100 min-w-0 w-full">
         <div className="flex items-center justify-between text-[11px] text-slate-500 mb-3 font-medium min-w-0">
-          <span className="flex items-center gap-1 shrink-0">
+          <span className="flex items-center gap-1.5 shrink-0">
             <HardDrive className="w-3.5 h-3.5 text-slate-400" />
             <span>{formatFileSize(material.fileSize)}</span>
+            <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded uppercase">
+              {getFileExtension(material.fileName) || 'PDF'}
+            </span>
           </span>
           <span className="flex items-center gap-1 shrink-0">
             <Calendar className="w-3.5 h-3.5 text-slate-400" />
@@ -229,7 +233,7 @@ export const MaterialCard: React.FC<MaterialCardProps> = React.memo(({
           <Link
             to={materialUrl}
             onClick={(e) => e.stopPropagation()}
-            aria-label={`View PDF for ${material.title}`}
+            aria-label={`View ${material.title}`}
             className="flex-1 min-w-0 min-h-[42px] inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 active:bg-slate-100 rounded-lg transition-colors box-border"
           >
             <Eye className="w-3.5 h-3.5 text-slate-500 shrink-0" />

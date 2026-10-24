@@ -9,6 +9,12 @@ import {
   Check,
   BookOpen,
 } from 'lucide-react';
+import {
+  Presentation,
+  FileSpreadsheet,
+  FileArchive,
+  Image as ImageIcon,
+} from '../common/icons';
 import { StudyMaterial, Subject } from '../../types';
 import {
   fetchPdfBlobUrl,
@@ -22,6 +28,7 @@ import {
 import { shareMaterial } from '../../utils/shareUtils';
 import { useToast } from '../../context/ToastContext';
 import { formatFileSize } from './MaterialCard';
+import { getFileFormatInfo } from '../../utils/fileTypes';
 
 interface PdfViewerProps {
   material: StudyMaterial;
@@ -141,6 +148,26 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material, subject }) => {
     }
   };
 
+  const formatInfo = getFileFormatInfo(material.fileName);
+  const isImage = formatInfo.category === 'image';
+  const isPdf = formatInfo.extension === 'pdf';
+  const isPreviewable = formatInfo.previewable;
+
+  const renderFormatIcon = (className: string) => {
+    switch (formatInfo.category) {
+      case 'presentation':
+        return <Presentation className={className} />;
+      case 'spreadsheet':
+        return <FileSpreadsheet className={className} />;
+      case 'archive':
+        return <FileArchive className={className} />;
+      case 'image':
+        return <ImageIcon className={className} />;
+      default:
+        return <FileText className={className} />;
+    }
+  };
+
   const isDirectPdf =
     Boolean(resolvedUrl) &&
     (resolvedUrl!.startsWith('blob:') ||
@@ -161,7 +188,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material, subject }) => {
       {/* Viewer Toolbar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-3 sm:px-4 py-2.5 sm:py-3 bg-white border-b border-slate-200 text-slate-900 flex-shrink-0">
         <div className="flex items-center gap-2 min-w-0 w-full sm:w-auto sm:max-w-[55%]">
-          <FileText className="w-4 h-4 text-blue-600 flex-shrink-0" />
+          {renderFormatIcon('w-4 h-4 text-blue-600 flex-shrink-0')}
           <span className="text-xs sm:text-sm font-semibold text-slate-900 truncate">
             {material.fileName || material.title}
           </span>
@@ -205,7 +232,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material, subject }) => {
               <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
               <span>Fullscreen</span>
             </a>
-          ) : (
+          ) : isPreviewable ? (
             <button
               type="button"
               onClick={handleLoadReader}
@@ -216,7 +243,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material, subject }) => {
               <BookOpen className="w-3.5 h-3.5 text-slate-600" />
               <span>Read Online</span>
             </button>
-          )}
+          ) : null}
 
           {/* Download button with live progress telemetry */}
           <button
@@ -231,7 +258,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material, subject }) => {
               <Download className="w-3.5 h-3.5" />
             )}
             <span className="truncate max-w-[130px] sm:max-w-none">
-              {downloadProgressText || (downloading ? 'Starting...' : 'Download')}
+              {downloadProgressText || (downloading ? 'Starting...' : `Download ${formatInfo.extension.toUpperCase()}`)}
             </span>
           </button>
         </div>
@@ -244,10 +271,10 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material, subject }) => {
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50 z-10 px-4 text-center">
             <RefreshCw className="w-9 h-9 text-blue-600 animate-spin mb-3.5" />
             <p className="text-sm font-bold text-slate-800">
-              {loadingProgress || 'Loading PDF document...'}
+              {loadingProgress || 'Loading document...'}
             </p>
             <p className="text-xs text-slate-400 mt-1">
-              Retrieving document from Realtime Database
+              Retrieving document from secure storage
             </p>
           </div>
         )}
@@ -261,7 +288,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material, subject }) => {
             </h4>
             <p className="text-xs text-slate-500 mb-4 leading-relaxed">
               {errorMessage ||
-                'Your browser or network prevented the inline PDF reader from displaying. You can download the document directly below.'}
+                'Your browser or network prevented the inline reader from displaying. You can download the document directly below.'}
             </p>
             <div className="flex items-center justify-center gap-3">
               <button
@@ -271,33 +298,91 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material, subject }) => {
                 className="px-5 py-2.5 bg-blue-600 text-white text-xs font-semibold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-sm"
               >
                 <Download className="w-4 h-4" />
-                <span>{downloading ? 'Downloading...' : 'Download PDF Directly'}</span>
+                <span>{downloading ? 'Downloading...' : `Download ${formatInfo.extension.toUpperCase()} Directly`}</span>
               </button>
             </div>
           </div>
-        ) : isReaderActive && viewerSrc ? (
-          /* State 3: Active Document Iframe */
-          <iframe
-            src={viewerSrc}
-            title={material.title}
-            className="w-full h-full border-0"
-            onLoad={() => setIsLoading(false)}
-            onError={() => {
-              setIsLoading(false);
-              setLoadError(true);
-            }}
-          />
-        ) : (
-          /* State 4: Clean On-Demand Preview Card (0 KB loaded until requested) */
+        ) : !isPreviewable ? (
+          /* State 3A: Clean Non-Previewable Format Card (Word, PowerPoint, Excel, ZIP) */
           <div className="text-center p-6 sm:p-8 max-w-md bg-white rounded-2xl border border-slate-200/90 shadow-sm mx-4">
             <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-4 border border-blue-100 shadow-sm">
-              <FileText className="w-7 h-7" />
+              {renderFormatIcon('w-7 h-7 text-blue-600')}
+            </div>
+            <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-1 leading-snug">
+              {material.title}
+            </h3>
+            <p className="text-xs text-slate-500 mb-2 truncate max-w-xs mx-auto">
+              {material.fileName || formatInfo.label}
+            </p>
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-full">
+                {formatInfo.label}
+              </span>
+              {material.fileSize ? (
+                <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">
+                  {formatFileSize(material.fileSize)}
+                </span>
+              ) : null}
+            </div>
+
+            <p className="text-xs text-slate-500 mb-5 leading-relaxed">
+              In-browser preview is not supported for {formatInfo.label} files. Click below to download and view the material on your device.
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5">
+              <button
+                type="button"
+                onClick={handleDownload}
+                disabled={downloading}
+                className="w-full sm:w-auto min-h-[42px] px-6 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-semibold rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                {downloading ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                <span>{downloadProgressText || (downloading ? 'Downloading...' : `Download ${formatInfo.extension.toUpperCase()}`)}</span>
+              </button>
+            </div>
+          </div>
+        ) : isReaderActive && resolvedUrl ? (
+          /* State 3B: Active Preview (Image or PDF or Text) */
+          isImage ? (
+            <div className="w-full h-full p-4 flex items-center justify-center overflow-auto bg-slate-900/5">
+              <img
+                src={resolvedUrl}
+                alt={material.title}
+                className="max-h-full max-w-full object-contain rounded shadow-sm"
+                onLoad={() => setIsLoading(false)}
+                onError={() => {
+                  setIsLoading(false);
+                  setLoadError(true);
+                }}
+              />
+            </div>
+          ) : (
+            <iframe
+              src={viewerSrc}
+              title={material.title}
+              className="w-full h-full border-0"
+              onLoad={() => setIsLoading(false)}
+              onError={() => {
+                setIsLoading(false);
+                setLoadError(true);
+              }}
+            />
+          )
+        ) : (
+          /* State 4: Clean On-Demand Preview Card for Previewable Formats */
+          <div className="text-center p-6 sm:p-8 max-w-md bg-white rounded-2xl border border-slate-200/90 shadow-sm mx-4">
+            <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-4 border border-blue-100 shadow-sm">
+              {renderFormatIcon('w-7 h-7 text-blue-600')}
             </div>
             <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-1 leading-snug">
               {material.title}
             </h3>
             <p className="text-xs text-slate-500 mb-1 truncate max-w-xs mx-auto">
-              {material.fileName || 'PDF Document'}
+              {material.fileName || formatInfo.label}
             </p>
             {material.fileSize ? (
               <span className="inline-block text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full mb-5">
@@ -319,7 +404,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material, subject }) => {
                 ) : (
                   <Download className="w-4 h-4" />
                 )}
-                <span>{downloadProgressText || (downloading ? 'Downloading...' : 'Download PDF')}</span>
+                <span>{downloadProgressText || (downloading ? 'Downloading...' : `Download ${formatInfo.extension.toUpperCase()}`)}</span>
               </button>
 
               <button
@@ -342,7 +427,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ material, subject }) => {
       {/* Viewer Footer Status */}
       <div className="px-3 sm:px-4 py-2 bg-white border-t border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 text-[11px] text-slate-400">
         <span>Verified Academic Document • CSE Semester 5</span>
-        <span className="hidden sm:inline">Realtime Database Secure Delivery</span>
+        <span className="hidden sm:inline">Secure Delivery</span>
       </div>
     </div>
   );

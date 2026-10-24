@@ -20,6 +20,10 @@ import {
   MAX_FILE_SIZE_BYTES,
 } from '../../services/firebaseService';
 import { formatFileSize } from '../materials/MaterialCard';
+import {
+  validateClientFile,
+  ACCEPTED_FILE_EXTENSIONS,
+} from '../../utils/fileTypes';
 import { Modal } from '../common/Modal';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
@@ -163,22 +167,13 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
     setCategory(newCat);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-      toast.error('Invalid File Type', 'Only PDF files (.pdf) are permitted.');
-      e.target.value = '';
-      setSelectedFile(null);
-      return;
-    }
-
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      toast.error(
-        'File Exceeds Limit',
-        `File size (${formatFileSize(file.size)}) exceeds maximum allowed size of 25 MB.`
-      );
+    const validation = await validateClientFile(file, MAX_FILE_SIZE_BYTES);
+    if (!validation.valid) {
+      toast.error('Invalid File', validation.error || 'The selected file format is not supported.');
       e.target.value = '';
       setSelectedFile(null);
       return;
@@ -199,7 +194,7 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
       return;
     }
     if (!isEdit && !selectedFile) {
-      toast.error('Validation Error', 'Please select a valid PDF file (max 25 MB).');
+      toast.error('Validation Error', 'Please select a valid study material file (max 50 MB).');
       return;
     }
 
@@ -321,6 +316,7 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
           experimentNumber: parsedExp,
           tags,
           fileName: uploadResult.fileName,
+          mimeType: uploadResult.mimeType,
           storagePath: uploadResult.storagePath,
           downloadUrl: uploadResult.downloadUrl,
           blobId: uploadResult.blobId,
@@ -603,16 +599,16 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
           </div>
         )}
 
-        {/* Replacement PDF Selection (In Edit mode) OR Primary PDF (In New mode) */}
+        {/* Replacement File Selection (In Edit mode) OR Primary File (In New mode) */}
         <div>
           <label className="block text-xs font-medium text-slate-700 mb-1">
             {isEdit
-              ? 'Select Replacement PDF (Optional)'
-              : 'Select PDF Document (Max 6 MB) *'}
+              ? 'Select Replacement File (Optional)'
+              : 'Select Study Material File (Max 50 MB) *'}
           </label>
           {isEdit && (
             <p className="text-[11px] text-slate-500 mb-2">
-              Leave empty to keep current file. Selecting a new PDF replaces the file safely in Realtime Database upon save.
+              Leave empty to keep current file. Selecting a new file replaces the file safely in storage upon save.
             </p>
           )}
 
@@ -620,7 +616,7 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
             <input
               type="file"
               id="material-pdf-upload"
-              accept=".pdf,application/pdf"
+              accept={ACCEPTED_FILE_EXTENSIONS}
               onChange={handleFileChange}
               className="hidden"
               disabled={isSubmitting}
@@ -631,13 +627,13 @@ export const MaterialFormModal: React.FC<MaterialFormModalProps> = ({
                 {selectedFile
                   ? `Selected: ${selectedFile.name}`
                   : isEdit
-                  ? 'Click to choose replacement PDF file'
-                  : 'Click to select PDF document'}
+                  ? 'Click to choose replacement file'
+                  : 'Click to select study material file'}
               </p>
               <p className="text-[11px] text-slate-400 mt-0.5">
                 {selectedFile
                   ? `File size: ${formatFileSize(selectedFile.size)}`
-                  : 'PDF format (.pdf) up to 6 MB for Realtime Database storage'}
+                  : 'Supports PDF, Word, Excel, PowerPoint, Text, RTF, Images, and ZIP archives'}
               </p>
             </label>
           </div>

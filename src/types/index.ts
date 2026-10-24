@@ -138,6 +138,7 @@ export interface StudyMaterial {
   experimentNumber?: number | null;
   tags?: string[];
   fileName: string;
+  mimeType?: string;
   storagePath: string;
   downloadUrl: string;
   blobId?: string; // Reference to RTDB /file_blobs/{blobId}
@@ -188,4 +189,5 @@ export interface DashboardStats {
 }
 
 export * from './adminFeatures';
+export * from './privateShare';
 

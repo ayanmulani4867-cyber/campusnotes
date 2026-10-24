@@ -40,6 +40,14 @@ import { cacheService } from './cacheService';
 import { compareMaterialsAscending } from '../utils/materialSorting';
 import { healthMonitorService } from './healthMonitorService';
 import { AUTHORIZED_ADMIN_EMAILS } from './authService';
+import {
+  validateClientFile,
+  validateMagicBytes,
+  getFileFormatInfo,
+  getFileExtension,
+  sanitizeSafeFilename,
+  isSupportedExtension,
+} from '../utils/fileTypes';
 
 // Lazy load fallback demo materials on demand to avoid shipping ~60 kB JSON in initial entry bundle
 async function loadDemoMaterials(): Promise<StudyMaterial[]> {
@@ -991,12 +999,15 @@ export async function getOrFetchR2PdfBlob(
         if (cachedDiskBlob) {
           onProgress?.('Loading from local cache...');
           const objectUrl = URL.createObjectURL(cachedDiskBlob);
-          const safeFilename = material.fileName || `${sanitizeFilename(material.title || 'study_material')}.pdf`;
+          const ext = getFileExtension(material.fileName) || 'pdf';
+          const safeFilename =
+            material.fileName || `${sanitizeFilename(material.title || 'study_material')}.${ext}`;
+          const formatInfo = getFileFormatInfo(safeFilename);
           const cachedEntry: CachedPdfBlob = {
             blob: cachedDiskBlob,
             objectUrl,
             fileName: safeFilename,
-            mimeType: 'application/pdf',
+            mimeType: cachedDiskBlob.type || formatInfo.mimeType,
             sizeBytes: cachedDiskBlob.size,
           };
           pdfBlobSessionCache.set(cacheKey, cachedEntry);
@@ -1034,20 +1045,21 @@ export async function getOrFetchR2PdfBlob(
       }
 
       const contentType = response.headers.get('content-type') || '';
-      if (!contentType.includes('application/pdf')) {
-        throw new Error('Invalid document format received from storage.');
-      }
+      const formatInfo = getFileFormatInfo(material.fileName);
+      const mimeType = contentType && !contentType.includes('text/html') ? contentType : formatInfo.mimeType;
 
       onProgress?.('Preparing file...');
       const blob = await response.blob();
       const objectUrl = URL.createObjectURL(blob);
-      const safeFilename = material.fileName || `${sanitizeFilename(material.title || 'study_material')}.pdf`;
+      const ext = getFileExtension(material.fileName) || 'pdf';
+      const safeFilename =
+        material.fileName || `${sanitizeFilename(material.title || 'study_material')}.${ext}`;
 
       const cachedEntry: CachedPdfBlob = {
         blob,
         objectUrl,
         fileName: safeFilename,
-        mimeType: 'application/pdf',
+        mimeType,
         sizeBytes: blob.size,
       };
 
@@ -1412,10 +1424,11 @@ export async function downloadStudyMaterial(
       onProgress?.('Starting download...');
 
       // Step 5: Programmatic browser download
+      const ext = getFileExtension(freshMaterial.fileName) || 'pdf';
       safeFilename =
         freshMaterial.fileName ||
         cachedEntry.fileName ||
-        `${sanitizeFilename(freshMaterial.title || 'study_material')}.pdf`;
+        `${sanitizeFilename(freshMaterial.title || 'study_material')}.${ext}`;
 
       triggerBrowserDownload(cachedEntry.objectUrl, safeFilename);
 
@@ -2042,6 +2055,7 @@ export async function uploadPdfToR2(
   fileName: string;
   fileSize: number;
   r2Key: string;
+  mimeType: string;
   storageProvider: 'r2';
 }> {
   if (!auth?.currentUser) {
@@ -2050,14 +2064,15 @@ export async function uploadPdfToR2(
 
   const token = await auth.currentUser.getIdToken();
   const workerBase = (R2_WORKER_URL || DEFAULT_R2_WORKER_URL).replace(/\/+$/, '');
-  const sanitizedName = sanitizeFilename(file.name);
+  const sanitizedName = sanitizeSafeFilename(file.name);
+  const formatInfo = getFileFormatInfo(file.name);
   const uploadUrl = `${workerBase}/materials/${encodeURIComponent(materialId)}/pdf?filename=${encodeURIComponent(sanitizedName)}`;
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', uploadUrl, true);
     xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-    xhr.setRequestHeader('Content-Type', 'application/pdf');
+    xhr.setRequestHeader('Content-Type', file.type || formatInfo.mimeType);
     xhr.setRequestHeader('X-Filename', encodeURIComponent(sanitizedName));
 
     if (xhr.upload && typeof onProgress === 'function') {
@@ -2080,6 +2095,7 @@ export async function uploadPdfToR2(
             fileName: res.fileName || file.name,
             fileSize: res.fileSize || file.size,
             r2Key: res.r2Key,
+            mimeType: res.mimeType || file.type || formatInfo.mimeType,
             storageProvider: 'r2',
           });
         } catch (parseErr) {
@@ -2140,6 +2156,7 @@ export interface UploadPdfResult {
   downloadUrl: string;
   fileName: string;
   fileSize: number;
+  mimeType?: string;
   blobId?: string;
   storageProvider?: 'firebase' | 'r2';
   r2Key?: string;
@@ -2147,8 +2164,9 @@ export interface UploadPdfResult {
 }
 
 /**
- * Upload PDF with Cloudflare R2 preference and Realtime Database fallback.
+ * Upload material file with Cloudflare R2 preference and Realtime Database fallback.
  * Authenticated admins upload directly to R2; unauthenticated or fallback uploads use RTDB Base64.
+ * Supports all academic formats: PDF, DOC, DOCX, TXT, RTF, PPT, PPTX, XLS, XLSX, CSV, JPG, PNG, WEBP, ZIP.
  */
 export async function uploadPdfFile(
   file: File,
@@ -2157,18 +2175,14 @@ export async function uploadPdfFile(
   onProgress?: (percent: number, bytesTransferred: number, totalBytes: number) => void,
   isPublished: boolean = true
 ): Promise<UploadPdfResult> {
-  // 1. File type and extension validation
-  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-    throw new Error('Only valid PDF documents (.pdf) are permitted.');
+  // 1. Comprehensive multi-format file validation & signature checking
+  const validation = await validateClientFile(file, MAX_R2_PDF_SIZE_BYTES);
+  if (!validation.valid) {
+    throw new Error(validation.error || 'The selected file is not a supported or valid document format.');
   }
+  const formatInfo = validation.formatInfo || getFileFormatInfo(file.name);
 
-  // 2. Binary header signature validation (%PDF-)
-  const isSignatureValid = await validatePdfSignature(file);
-  if (!isSignatureValid) {
-    throw new Error('Invalid file format: File header does not match standard PDF signature (%PDF-).');
-  }
-
-  // 3. Try Cloudflare R2 Upload first if admin is authenticated
+  // 2. Try Cloudflare R2 Upload first if admin is authenticated
   if (auth?.currentUser && (R2_WORKER_URL || DEFAULT_R2_WORKER_URL)) {
     if (file.size <= MAX_R2_PDF_SIZE_BYTES) {
       try {
@@ -2182,6 +2196,7 @@ export async function uploadPdfFile(
           downloadUrl: r2Result.downloadUrl,
           fileName: r2Result.fileName,
           fileSize: r2Result.fileSize,
+          mimeType: r2Result.mimeType || formatInfo.mimeType,
           storageProvider: 'r2',
           r2Key: r2Result.r2Key,
           r2Url: r2Result.downloadUrl,
@@ -2196,7 +2211,7 @@ export async function uploadPdfFile(
     }
   }
 
-  // 4. Strict file size validation for Realtime Database storage (6 MB max)
+  // 3. Strict file size validation for Realtime Database storage (6 MB max)
   if (!database) {
     throw new Error('Firebase Realtime Database is not initialized.');
   }
@@ -2208,13 +2223,13 @@ export async function uploadPdfFile(
     );
   }
 
-  // 5. Asynchronous Base64 conversion off the main thread for RTDB fallback
+  // 4. Asynchronous Base64 conversion off the main thread for RTDB fallback
   onProgress?.(10, Math.round(file.size * 0.1), file.size);
   const base64Data = await fileToBase64Async(file, onProgress);
   onProgress?.(50, Math.round(file.size * 0.5), file.size);
 
   const timestamp = Date.now();
-  const sanitizedName = sanitizeFilename(file.name);
+  const sanitizedName = sanitizeSafeFilename(file.name);
   const blobId = `blob_${materialId}_${timestamp}`;
   const storagePath = `rtdb://file_blobs/${blobId}`;
   const downloadUrl = `rtdb://${blobId}`;
@@ -2224,7 +2239,7 @@ export async function uploadPdfFile(
     material_id: materialId,
     file_name: sanitizedName,
     file_size_bytes: file.size,
-    mime_type: 'application/pdf',
+    mime_type: file.type || formatInfo.mimeType,
     data_base64: base64Data,
     published: isPublished,
     created_at: timestamp,
@@ -2232,7 +2247,7 @@ export async function uploadPdfFile(
 
   onProgress?.(70, Math.round(file.size * 0.7), file.size);
 
-  // 6. Save blob to RTDB /file_blobs/{blobId} with a 45-second timeout guard
+  // 5. Save blob to RTDB /file_blobs/{blobId} with a 45-second timeout guard
   const writePromise = set(ref(database, `file_blobs/${blobId}`), blobRecord);
   const timeoutPromise = new Promise<never>((_, reject) =>
     setTimeout(
@@ -2260,6 +2275,7 @@ export async function uploadPdfFile(
       downloadUrl,
       fileName: file.name,
       fileSize: file.size,
+      mimeType: file.type || formatInfo.mimeType,
       blobId,
       storageProvider: 'firebase',
     };
@@ -2273,6 +2289,9 @@ export async function uploadPdfFile(
     throw err;
   }
 }
+
+export const uploadMaterialFile = uploadPdfFile;
+export const uploadMaterialToR2 = uploadPdfToR2;
 
 /**
  * Check if a blob ID is referenced by any other material in RTDB
@@ -2487,12 +2506,14 @@ export async function replaceMaterialPdf(
         throw new Error('Verification failed: Replacement PDF blob has empty or corrupted data.');
       }
       try {
-        const headerSample = atob(verifiedBlob.data_base64.slice(0, 64));
-        if (!headerSample.startsWith('%PDF-')) {
-          throw new Error('Verification failed: Decoded replacement data does not match PDF signature (%PDF-).');
+        const decodedHeaderBytes = decodeBase64ToUint8Array(verifiedBlob.data_base64.slice(0, 64));
+        const ext = getFileExtension(uploadResult.fileName);
+        const check = validateMagicBytes(decodedHeaderBytes.buffer, ext);
+        if (!check.isValid) {
+          throw new Error(check.error || `Verification failed: Decoded data does not match .${ext} signature.`);
         }
       } catch (decodeErr) {
-        throw new Error(`Verification failed: Decoded replacement data is not valid Base64 PDF: ${decodeErr}`);
+        throw new Error(`Verification failed: Decoded replacement data is not valid Base64 file: ${decodeErr}`);
       }
     }
 
@@ -2502,6 +2523,7 @@ export async function replaceMaterialPdf(
       ...currentMaterial,
       ...additionalMetadataUpdates,
       fileName: uploadResult.fileName,
+      mimeType: uploadResult.mimeType,
       storagePath: uploadResult.storagePath,
       downloadUrl: uploadResult.downloadUrl,
       fileSize: uploadResult.fileSize,

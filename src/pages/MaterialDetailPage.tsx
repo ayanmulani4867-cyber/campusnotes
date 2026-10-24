@@ -30,6 +30,7 @@ import { EmptyState } from '../components/common/EmptyState';
 import { useToast } from '../context/ToastContext';
 import { shareMaterial } from '../utils/shareUtils';
 import { cacheService } from '../services/cacheService';
+import { getFileFormatInfo } from '../utils/fileTypes';
 
 export const MaterialDetailPage: React.FC = () => {
   const { materialId } = useParams<{ materialId: string }>();
@@ -205,6 +206,8 @@ export const MaterialDetailPage: React.FC = () => {
     badgeColor: 'bg-slate-100 text-slate-700 border-slate-200',
   };
 
+  const formatInfo = getFileFormatInfo(material.fileName);
+
   return (
     <div className="w-full max-w-7xl mx-auto min-w-0 px-3.5 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-12 space-y-6 sm:space-y-8 box-border">
       {/* Navigation Breadcrumb */}
@@ -300,7 +303,7 @@ export const MaterialDetailPage: React.FC = () => {
                 ) : (
                   <>
                     <Download className="w-4 h-4" />
-                    <span>Download PDF</span>
+                    <span>Download {formatInfo.extension ? formatInfo.extension.toUpperCase() : 'File'}</span>
                   </>
                 )}
               </button>
@@ -346,7 +349,7 @@ export const MaterialDetailPage: React.FC = () => {
                 <span>Published: {formatDate(material.createdAt)}</span>
               </span>
               <span className="text-slate-700 font-medium bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                Verified Document
+                {formatInfo.label}
               </span>
             </div>
           </div>

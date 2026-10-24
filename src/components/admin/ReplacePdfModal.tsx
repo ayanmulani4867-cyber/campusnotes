@@ -6,6 +6,10 @@ import {
   MAX_FILE_SIZE_BYTES,
 } from '../../services/firebaseService';
 import { formatFileSize } from '../materials/MaterialCard';
+import {
+  validateClientFile,
+  ACCEPTED_FILE_EXTENSIONS,
+} from '../../utils/fileTypes';
 import { Modal } from '../common/Modal';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
@@ -34,22 +38,13 @@ export const ReplacePdfModal: React.FC<ReplacePdfModalProps> = ({
 
   if (!material) return null;
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-      toast.error('Invalid File Type', 'Only PDF files (.pdf) are permitted.');
-      e.target.value = '';
-      setSelectedFile(null);
-      return;
-    }
-
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      toast.error(
-        'File Exceeds Limit',
-        `File size (${formatFileSize(file.size)}) exceeds maximum allowed size of 50 MB.`
-      );
+    const validation = await validateClientFile(file, MAX_FILE_SIZE_BYTES);
+    if (!validation.valid) {
+      toast.error('Invalid File', validation.error || 'The selected file format is not supported.');
       e.target.value = '';
       setSelectedFile(null);
       return;
@@ -61,7 +56,7 @@ export const ReplacePdfModal: React.FC<ReplacePdfModalProps> = ({
   const handleReplace = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFile) {
-      toast.error('Validation Error', 'Please select a replacement PDF document.');
+      toast.error('Validation Error', 'Please select a replacement file.');
       return;
     }
 
@@ -153,13 +148,13 @@ export const ReplacePdfModal: React.FC<ReplacePdfModalProps> = ({
         {/* New File Selector */}
         <div>
           <label className="block text-xs font-medium text-slate-700 mb-1">
-            Choose Replacement PDF (Max 6 MB) *
+            Choose Replacement File (Max 50 MB) *
           </label>
           <div className="border border-dashed border-slate-300 rounded-lg p-5 text-center hover:border-slate-400 transition-colors bg-white">
             <input
               type="file"
               id="replace-pdf-upload"
-              accept=".pdf,application/pdf"
+              accept={ACCEPTED_FILE_EXTENSIONS}
               onChange={handleFileChange}
               className="hidden"
               disabled={isReplacing}
@@ -167,12 +162,12 @@ export const ReplacePdfModal: React.FC<ReplacePdfModalProps> = ({
             <label htmlFor="replace-pdf-upload" className="cursor-pointer block">
               <Upload className="w-5 h-5 text-slate-400 mx-auto mb-1.5" />
               <p className="text-xs font-medium text-slate-800">
-                {selectedFile ? selectedFile.name : 'Click to select replacement PDF from your computer'}
+                {selectedFile ? selectedFile.name : 'Click to select replacement file from your computer'}
               </p>
               <p className="text-[11px] text-slate-400 mt-0.5">
                 {selectedFile
                   ? `New file size: ${formatFileSize(selectedFile.size)}`
-                  : 'Accepts .pdf files only, up to 6 MB for Realtime Database storage'}
+                  : 'Supports PDF, Word, Excel, PowerPoint, Text, RTF, Images, and ZIP archives'}
               </p>
             </label>
           </div>
@@ -182,7 +177,7 @@ export const ReplacePdfModal: React.FC<ReplacePdfModalProps> = ({
         {uploadProgress !== null && (
           <div className="space-y-1.5 p-3 bg-slate-50 rounded-lg border border-slate-200">
             <div className="flex items-center justify-between text-xs font-medium text-slate-800">
-              <span>Uploading replacement PDF to Realtime Database...</span>
+              <span>Uploading replacement file...</span>
               <span>{uploadProgress}%</span>
             </div>
             <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">

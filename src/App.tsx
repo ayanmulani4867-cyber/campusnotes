@@ -43,6 +43,9 @@ const AdminDashboardPage = lazy(() =>
 const AdminAuthGuard = lazy(() =>
   import('./components/admin/AdminAuthGuard').then((m) => ({ default: m.AdminAuthGuard }))
 );
+const PrivateAssignmentPage = lazy(() =>
+  import('./pages/PrivateAssignmentPage').then((m) => ({ default: m.PrivateAssignmentPage }))
+);
 
 const PageLoader: React.FC = () => (
   <div className="min-h-[50vh] flex flex-col items-center justify-center p-8 text-center">
@@ -73,6 +76,10 @@ const AppContent: React.FC = () => {
             <Route path="/subjects/:subjectId" element={<SubjectDetailPage />} />
             <Route path="/category/:categorySlug" element={<CategoryPage />} />
             <Route path="/about" element={<AboutPage />} />
+
+            {/* Private Sharing Routes (Direct Access - No Login Required) */}
+            <Route path="/private-assignment/:token" element={<PrivateAssignmentPage />} />
+            <Route path="/private-share/:token" element={<PrivateAssignmentPage />} />
 
             {/* Admin Routes */}
             <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />

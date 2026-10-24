@@ -29,3 +29,6 @@ serviceAccountKey.json
 *.njsproj
 *.sln
 *.sw?
+
+# Temporary screenshot media
+CampusNotes_LinkedIn_Screenshots*
