@@ -25,7 +25,7 @@ function test(name, fn) {
 // -----------------------------------------------------------------------------
 console.log('--- Test Suite 1: Full-Card Clickable Navigation & Accessibility ---');
 
-const materialCardCode = fs.readFileSync('src/components/materials/MaterialCard.tsx', 'utf8');
+const materialCardCode = fs.readFileSync('src/components/materials/MaterialCard.tsx', 'utf8').replace(/\r\n/g, '\n');
 
 test('MaterialCard has cursor-pointer and relative positioning on outer container', () => {
   assert(materialCardCode.includes('cursor-pointer'), 'MaterialCard outer container must have cursor-pointer');

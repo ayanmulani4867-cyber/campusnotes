@@ -303,9 +303,9 @@ test('Unpublished material blocks sharing and alerts user', async () => {
 // -----------------------------------------------------------------------------
 console.log('\n--- Test Suite 4: Component Prop and Subject Integration ---');
 
-const materialCardCode = fs.readFileSync('src/components/materials/MaterialCard.tsx', 'utf8');
-const materialDetailCode = fs.readFileSync('src/pages/MaterialDetailPage.tsx', 'utf8');
-const pdfViewerCode = fs.readFileSync('src/components/materials/PdfViewer.tsx', 'utf8');
+const materialCardCode = fs.readFileSync('src/components/materials/MaterialCard.tsx', 'utf8').replace(/\r\n/g, '\n');
+const materialDetailCode = fs.readFileSync('src/pages/MaterialDetailPage.tsx', 'utf8').replace(/\r\n/g, '\n');
+const pdfViewerCode = fs.readFileSync('src/components/materials/PdfViewer.tsx', 'utf8').replace(/\r\n/g, '\n');
 
 test('MaterialCard forwards subject prop to shareMaterial', () => {
   assert(materialCardCode.includes('shareMaterial(\n      material,\n      (title, msg) => {\n        toast.success(title, msg);\n      },\n      subject\n    )'), 'MaterialCard does not pass subject to shareMaterial');

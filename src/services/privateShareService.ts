@@ -76,6 +76,7 @@ function deleteLocalPrivateShare(shareId: string): void {
 /**
  * Creates a new private share link for an assignment or note.
  * Requires administrator authentication.
+ * Guarantees that links are only presented to the admin if successfully persisted to Cloudflare R2 or Firebase RTDB.
  */
 export async function createPrivateShare(
   input: CreatePrivateShareInput
@@ -89,6 +90,80 @@ export async function createPrivateShare(
   const workerBase = getWorkerBaseUrl();
   const endpoint = `${workerBase}/private-shares`;
 
+  // Pre-generate 32-byte secure token (256-bit entropy) and SHA-256 hash
+  const randomBytes = new Uint8Array(32);
+  crypto.getRandomValues(randomBytes);
+  const rawToken = Array.from(randomBytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+
+  const hashBuffer = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(rawToken)
+  );
+  const tokenHash = Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+
+  // Lookup material details from database to ensure metadata completeness
+  let materialTitle = 'Study Material';
+  let fileName = `${input.materialId}.pdf`;
+  let fileSize = 0;
+  let r2Key: string | undefined = undefined;
+
+  if (database) {
+    try {
+      const snap = await get(ref(database, `materials/${input.materialId}`));
+      if (snap.exists()) {
+        const val = snap.val();
+        materialTitle = val.title || materialTitle;
+        fileName = val.fileName || fileName;
+        fileSize = val.fileSize || 0;
+        r2Key = val.r2Key || undefined;
+      } else {
+        const pubSnap = await get(ref(database, `publicMaterials/${input.materialId}`));
+        if (pubSnap.exists()) {
+          const val = pubSnap.val();
+          materialTitle = val.title || materialTitle;
+          fileName = val.fileName || fileName;
+          fileSize = val.fileSize || 0;
+          r2Key = val.r2Key || undefined;
+        }
+      }
+    } catch {
+      // Non-blocking material metadata read notice
+    }
+  }
+
+  const now = Date.now();
+  const formatInfo = getFileFormatInfo(fileName);
+  const shareRecord: PrivateShareRecord = {
+    id: tokenHash,
+    tokenHash,
+    materialId: input.materialId,
+    materialTitle,
+    fileName,
+    fileSize,
+    mimeType: formatInfo.mimeType,
+    storageProvider: 'r2',
+    r2Key,
+    recipientName: input.recipientName?.trim() || undefined,
+    recipientEmail: input.recipientEmail?.trim() || undefined,
+    instructions: input.instructions?.trim() || undefined,
+    dueDate: input.dueDate || null,
+    expiresAt: input.expiresAt || null,
+    status: 'active',
+    createdAt: now,
+    createdBy: currentUser.email || currentUser.uid,
+    accessCount: 0,
+  };
+
+  let persistedToWorker = false;
+  let persistedToDatabase = false;
+  let workerErrorMessage = '';
+  let databaseErrorMessage = '';
+
+  // 1. Attempt Worker creation & R2 persistence
   const payload = {
     materialId: input.materialId,
     recipientName: input.recipientName?.trim() || undefined,
@@ -109,150 +184,72 @@ export async function createPrivateShare(
     });
 
     if (res.ok) {
-      const data = (await res.json()) as CreatePrivateShareResult;
-
-      // Redundantly backup the share record to Firebase RTDB /privateShares if database is online
-      if (database && data.shareId) {
-        try {
-          const rtdbRecord = stripUndefined({
-            id: data.shareId,
-            tokenHash: data.shareId,
-            materialId: data.materialId,
-            materialTitle: data.materialTitle,
-            fileName: data.fileName,
-            recipientName: data.recipientName,
-            recipientEmail: data.recipientEmail,
-            instructions: data.instructions,
-            dueDate: data.dueDate,
-            expiresAt: data.expiresAt,
-            status: 'active',
-            createdAt: data.createdAt,
-            createdBy: currentUser.email || currentUser.uid,
-            accessCount: 0,
-          });
-          await set(ref(database, `privateShares/${data.shareId}`), rtdbRecord);
-        } catch (rtdbErr) {
-          console.warn('Notice syncing private share to RTDB backup:', rtdbErr);
-        }
+      const workerResult = (await res.json()) as CreatePrivateShareResult;
+      persistedToWorker = true;
+      // If worker returned a server-generated token, use worker's credentials
+      if (workerResult.shareId && workerResult.token) {
+        shareRecord.id = workerResult.shareId;
+        shareRecord.tokenHash = workerResult.shareId;
       }
-
-      return data;
     } else {
-      let errorMsg = `Server error (HTTP ${res.status})`;
+      workerErrorMessage = `Worker HTTP ${res.status}`;
       try {
         const errJson = await res.json();
-        if (errJson.error) errorMsg = errJson.error;
+        if (errJson.error) workerErrorMessage = errJson.error;
       } catch {
-        // use default
+        // ignore json parse error
       }
-      throw new Error(errorMsg);
     }
-  } catch (err: unknown) {
-    // If worker is unreachable in local offline test mode, fallback to direct client-side generation
-    console.warn('Notice calling Cloudflare Worker /private-shares, using local engine fallback:', err);
-    return await fallbackCreatePrivateShare(input, currentUser);
+  } catch (workerErr: unknown) {
+    workerErrorMessage = workerErr instanceof Error ? workerErr.message : String(workerErr);
   }
-}
 
-/**
- * Fallback generator for local offline development when Worker is unreachable
- */
-async function fallbackCreatePrivateShare(
-  input: CreatePrivateShareInput,
-  currentUser: import('firebase/auth').User
-): Promise<CreatePrivateShareResult> {
-  // Generate 32-byte secure token
-  const randomBytes = new Uint8Array(32);
-  crypto.getRandomValues(randomBytes);
-  const rawToken = Array.from(randomBytes)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-
-  // SHA-256 hash
-  const hashBuffer = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(rawToken)
-  );
-  const tokenHash = Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-
-  // Lookup material details
-  let materialTitle = 'Study Material';
-  let fileName = `${input.materialId}.pdf`;
-  let fileSize = 0;
-
+  // 2. Attempt Firebase Realtime Database persistence
   if (database) {
     try {
-      const snap = await get(ref(database, `materials/${input.materialId}`));
-      if (snap.exists()) {
-        const val = snap.val();
-        materialTitle = val.title || materialTitle;
-        fileName = val.fileName || fileName;
-        fileSize = val.fileSize || 0;
-      }
-    } catch {
-      // ignore
+      await set(ref(database, `privateShares/${shareRecord.tokenHash}`), stripUndefined(shareRecord));
+      persistedToDatabase = true;
+    } catch (rtdbErr: unknown) {
+      const msg = rtdbErr instanceof Error ? rtdbErr.message : String(rtdbErr);
+      databaseErrorMessage = msg;
+      console.warn('Notice saving private share to RTDB:', msg);
     }
   }
 
-  const now = Date.now();
-  const shareRecord: PrivateShareRecord = {
-    id: tokenHash,
-    tokenHash,
-    materialId: input.materialId,
-    materialTitle,
-    fileName,
-    fileSize,
-    mimeType: getFileFormatInfo(fileName).mimeType,
-    storageProvider: 'r2',
-    recipientName: input.recipientName?.trim() || undefined,
-    recipientEmail: input.recipientEmail?.trim() || undefined,
-    instructions: input.instructions?.trim() || undefined,
-    dueDate: input.dueDate || null,
-    expiresAt: input.expiresAt || null,
-    status: 'active',
-    createdAt: now,
-    createdBy: currentUser.email || currentUser.uid,
-    accessCount: 0,
-  };
+  // CRITICAL REQUIREMENT: If saving the share fails on all cloud destinations, do NOT display a successful link!
+  if (!persistedToWorker && !persistedToDatabase) {
+    const combinedReason = [
+      workerErrorMessage ? `Worker: ${workerErrorMessage}` : null,
+      databaseErrorMessage ? `Database: ${databaseErrorMessage}` : null,
+    ]
+      .filter(Boolean)
+      .join('; ');
 
-  // Always persist to local admin storage for resilient local testing
+    throw new Error(
+      `Failed to save private share record (${combinedReason || 'No backend storage available'}). Link generation cancelled to prevent distributing non-functional links.`
+    );
+  }
+
+  // Always cache in local storage for offline admin reference
   saveLocalPrivateShare(shareRecord);
-
-  if (database) {
-    try {
-      await set(ref(database, `privateShares/${tokenHash}`), stripUndefined(shareRecord));
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('PERMISSION_DENIED') || msg.includes('Permission denied')) {
-        console.warn(
-          '[Notice] Firebase Realtime Database returned PERMISSION_DENIED for /privateShares because local database.rules.json has not yet been deployed to production. ' +
-          'Share has been safely persisted locally in administrator storage.'
-        );
-      } else {
-        throw err;
-      }
-    }
-  }
 
   const canonicalDomain = window.location.origin;
   const shareUrl = `${canonicalDomain}/private-assignment/${rawToken}`;
 
   return {
     ok: true,
-    shareId: tokenHash,
+    shareId: shareRecord.tokenHash,
     token: rawToken,
     shareUrl,
     materialId: input.materialId,
-    materialTitle,
-    fileName,
+    materialTitle: shareRecord.materialTitle,
+    fileName: shareRecord.fileName,
     recipientName: shareRecord.recipientName,
     recipientEmail: shareRecord.recipientEmail,
     instructions: shareRecord.instructions,
     dueDate: shareRecord.dueDate,
     expiresAt: shareRecord.expiresAt,
-    createdAt: now,
+    createdAt: shareRecord.createdAt,
     status: 'active',
   };
 }
@@ -570,6 +567,19 @@ export async function validatePrivateShare(
   const workerBase = getWorkerBaseUrl();
   const endpoint = `${workerBase}/private-shares/${encodeURIComponent(cleanToken)}/info`;
 
+  // Compute tokenHash for cryptographic lookup
+  const hashBuffer = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(cleanToken)
+  );
+  const tokenHash = Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+
+  let workerError: string | null = null;
+  let isWorkerEndpointMissing = false;
+
+  // 1. Try Cloudflare Worker validation first
   try {
     const res = await fetch(endpoint);
     if (res.ok) {
@@ -580,109 +590,128 @@ export async function validatePrivateShare(
     if (res.status === 410) {
       const errData = await res.json().catch(() => ({}));
       if (errData.revoked) {
-        throw new Error('This private sharing link has been revoked by an administrator.');
+        throw new Error('REVOKED: This private sharing link has been revoked by an administrator.');
       }
       if (errData.expired) {
-        throw new Error('This private sharing link has expired.');
+        throw new Error('EXPIRED: This private sharing link has expired.');
       }
-      throw new Error(errData.error || 'This private sharing link is no longer active.');
+      throw new Error('REVOKED: This private sharing link is no longer active.');
     }
 
     if (res.status === 429) {
-      throw new Error('Too many attempts. Please try again in a few moments.');
+      throw new Error('RATE_LIMITED: Too many attempts. Please try again in a few moments.');
     }
 
     if (res.status === 404) {
-      throw new Error('This private sharing link is invalid, expired, or unavailable.');
+      const errJson = await res.json().catch(() => ({}));
+      if (errJson.error === 'Not found') {
+        // Generic 404 indicates the Worker route itself is not yet deployed on Cloudflare
+        isWorkerEndpointMissing = true;
+        workerError = 'Worker endpoint not found (HTTP 404). Attempting database resolution.';
+      } else {
+        // Specific 404 from Worker logic indicating token does not exist in R2
+        workerError = errJson.error || 'Sharing record not found in storage.';
+      }
+    } else {
+      workerError = `Worker error (HTTP ${res.status})`;
     }
+  } catch (workerErr: unknown) {
+    const msg = workerErr instanceof Error ? workerErr.message : String(workerErr);
+    if (msg.startsWith('REVOKED:') || msg.startsWith('EXPIRED:') || msg.startsWith('RATE_LIMITED:')) {
+      throw workerErr;
+    }
+    workerError = msg;
+  }
 
-    throw new Error(`Failed to validate private link (HTTP ${res.status}).`);
-  } catch (err: unknown) {
-    // Check local storage and RTDB fallback
+  // 2. Local Storage check (for local development or admin pre-testing)
+  const localMap = getLocalPrivateShares();
+  const localRecord = localMap[tokenHash];
+  if (localRecord) {
+    const now = Date.now();
+    if (localRecord.status === 'revoked') {
+      throw new Error('REVOKED: This private sharing link has been revoked by an administrator.');
+    }
+    if (localRecord.expiresAt && now > localRecord.expiresAt) {
+      throw new Error('EXPIRED: This private sharing link has expired.');
+    }
+    const formatInfo = getFileFormatInfo(localRecord.fileName);
+    return {
+      valid: true,
+      materialTitle: localRecord.materialTitle,
+      fileName: localRecord.fileName,
+      fileSize: localRecord.fileSize,
+      mimeType: formatInfo.mimeType,
+      fileTypeInfo: formatInfo,
+      recipientName: localRecord.recipientName,
+      instructions: localRecord.instructions,
+      dueDate: localRecord.dueDate,
+      createdAt: localRecord.createdAt,
+      expiresAt: localRecord.expiresAt,
+      downloadUrl: `${workerBase}/private-shares/${encodeURIComponent(cleanToken)}/file?download=1`,
+      previewUrl: formatInfo.previewable
+        ? `${workerBase}/private-shares/${encodeURIComponent(cleanToken)}/file`
+        : undefined,
+    };
+  }
+
+  // 3. Fallback to Firebase Realtime Database
+  if (database) {
     try {
-      const hashBuffer = await crypto.subtle.digest(
-        'SHA-256',
-        new TextEncoder().encode(cleanToken)
-      );
-      const tokenHash = Array.from(new Uint8Array(hashBuffer))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
-
-      // 1. Check local storage
-      const localMap = getLocalPrivateShares();
-      const localRecord = localMap[tokenHash];
-      if (localRecord) {
+      const snap = await get(ref(database, `privateShares/${tokenHash}`));
+      if (snap.exists()) {
+        const share = snap.val() as PrivateShareRecord;
         const now = Date.now();
-        if (localRecord.status === 'revoked') {
-          throw new Error('This private sharing link has been revoked by an administrator.');
+        if (share.status === 'revoked') {
+          throw new Error('REVOKED: This private sharing link has been revoked by an administrator.');
         }
-        if (localRecord.expiresAt && now > localRecord.expiresAt) {
-          throw new Error('This private sharing link has expired.');
+        if (share.expiresAt && now > share.expiresAt) {
+          throw new Error('EXPIRED: This private sharing link has expired.');
         }
-        const formatInfo = getFileFormatInfo(localRecord.fileName);
+
+        const formatInfo = getFileFormatInfo(share.fileName);
         return {
           valid: true,
-          materialTitle: localRecord.materialTitle,
-          fileName: localRecord.fileName,
-          fileSize: localRecord.fileSize,
+          materialTitle: share.materialTitle,
+          fileName: share.fileName,
+          fileSize: share.fileSize,
           mimeType: formatInfo.mimeType,
           fileTypeInfo: formatInfo,
-          recipientName: localRecord.recipientName,
-          instructions: localRecord.instructions,
-          dueDate: localRecord.dueDate,
-          createdAt: localRecord.createdAt,
-          expiresAt: localRecord.expiresAt,
-          downloadUrl: `${workerBase}/materials/${encodeURIComponent(localRecord.materialId)}/pdf?download=1`,
+          recipientName: share.recipientName,
+          instructions: share.instructions,
+          dueDate: share.dueDate,
+          createdAt: share.createdAt,
+          expiresAt: share.expiresAt,
+          downloadUrl: `${workerBase}/private-shares/${encodeURIComponent(cleanToken)}/file?download=1`,
           previewUrl: formatInfo.previewable
-            ? `${workerBase}/materials/${encodeURIComponent(localRecord.materialId)}/pdf`
+            ? `${workerBase}/private-shares/${encodeURIComponent(cleanToken)}/file`
             : undefined,
         };
+      } else {
+        // Record was not found in RTDB
+        throw new Error('NOT_FOUND: This private sharing link was not found. Please verify the URL.');
       }
-
-      // 2. Check RTDB
-      if (database) {
-        const snap = await get(ref(database, `privateShares/${tokenHash}`));
-        if (snap.exists()) {
-          const share = snap.val() as PrivateShareRecord;
-          const now = Date.now();
-          if (share.status === 'revoked') {
-            throw new Error('This private sharing link has been revoked by an administrator.');
-          }
-          if (share.expiresAt && now > share.expiresAt) {
-            throw new Error('This private sharing link has expired.');
-          }
-
-          const formatInfo = getFileFormatInfo(share.fileName);
-          return {
-            valid: true,
-            materialTitle: share.materialTitle,
-            fileName: share.fileName,
-            fileSize: share.fileSize,
-            mimeType: formatInfo.mimeType,
-            fileTypeInfo: formatInfo,
-            recipientName: share.recipientName,
-            instructions: share.instructions,
-            dueDate: share.dueDate,
-            createdAt: share.createdAt,
-            expiresAt: share.expiresAt,
-            downloadUrl: `${workerBase}/materials/${encodeURIComponent(share.materialId)}/pdf?download=1`,
-            previewUrl: formatInfo.previewable
-              ? `${workerBase}/materials/${encodeURIComponent(share.materialId)}/pdf`
-              : undefined,
-          };
-        }
+    } catch (rtdbErr: unknown) {
+      const msg = rtdbErr instanceof Error ? rtdbErr.message : String(rtdbErr);
+      if (msg.startsWith('REVOKED:') || msg.startsWith('EXPIRED:') || msg.startsWith('NOT_FOUND:')) {
+        throw rtdbErr;
       }
-    } catch (fallbackErr) {
-      if (
-        fallbackErr instanceof Error &&
-        (fallbackErr.message.includes('revoked') || fallbackErr.message.includes('expired'))
-      ) {
-        throw fallbackErr;
+      if (msg.includes('PERMISSION_DENIED') || msg.includes('Permission denied')) {
+        throw new Error('PERMISSION_DENIED: Database permission denied reading private share record.');
       }
+      throw new Error(`DATABASE_ERROR: ${msg}`);
     }
-
-    throw err instanceof Error ? err : new Error(String(err));
   }
+
+  // If both Worker and Database could not resolve the token
+  if (isWorkerEndpointMissing) {
+    throw new Error('WORKER_UNCONFIGURED: The private sharing backend service is not yet deployed or configured.');
+  }
+
+  if (workerError) {
+    throw new Error(`NOT_FOUND: ${workerError}`);
+  }
+
+  throw new Error('NOT_FOUND: This private sharing link is invalid, expired, or unavailable.');
 }
 
 /**

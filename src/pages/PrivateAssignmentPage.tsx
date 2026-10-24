@@ -22,13 +22,123 @@ import { validatePrivateShare, getPrivateFileDownloadUrl } from '../services/pri
 import { formatFileSize } from '../components/materials/MaterialCard';
 import type { PrivateSharePublicInfo } from '../types/privateShare';
 
+type DiagnosticErrorType =
+  | 'invalid'
+  | 'expired'
+  | 'revoked'
+  | 'not_found'
+  | 'permission_denied'
+  | 'worker_error'
+  | 'material_missing'
+  | 'storage_error'
+  | 'network';
+
+interface DiagnosticInfo {
+  type: DiagnosticErrorType;
+  title: string;
+  description: string;
+  adminHint?: string;
+}
+
+function parseDiagnostics(err: unknown): DiagnosticInfo {
+  const rawMsg = err instanceof Error ? err.message : String(err);
+  const lower = rawMsg.toLowerCase();
+
+  if (rawMsg.startsWith('REVOKED:') || lower.includes('revoked')) {
+    return {
+      type: 'revoked',
+      title: 'Private Link Revoked',
+      description: 'This private sharing link was revoked by an administrator. Access to this document has been discontinued.',
+      adminHint: 'Record status is set to "revoked".',
+    };
+  }
+
+  if (rawMsg.startsWith('EXPIRED:') || lower.includes('expired')) {
+    return {
+      type: 'expired',
+      title: 'Private Link Expired',
+      description: 'This private sharing link reached its expiration date and is no longer accessible. Please contact the administrator or instructor to request a new link.',
+      adminHint: 'Current timestamp exceeds the configured expiresAt.',
+    };
+  }
+
+  if (rawMsg.startsWith('NOT_FOUND:') || lower.includes('not found') || lower.includes('unavailable')) {
+    return {
+      type: 'not_found',
+      title: 'Sharing Record Not Found',
+      description: 'This private sharing link was not found. Please confirm you have copied the entire URL correctly.',
+      adminHint: 'No matching tokenHash found in Cloudflare R2 shares/ or RTDB privateShares/.',
+    };
+  }
+
+  if (rawMsg.startsWith('PERMISSION_DENIED:') || lower.includes('permission_denied') || lower.includes('permission denied')) {
+    return {
+      type: 'permission_denied',
+      title: 'Database Access Restricted',
+      description: 'Database security policies restricted access to this document. Please contact the administrator to ensure database rules are active.',
+      adminHint: 'Firebase RTDB returned PERMISSION_DENIED. Check database.rules.json rules for privateShares/$shareHash.',
+    };
+  }
+
+  if (rawMsg.startsWith('WORKER_UNCONFIGURED:') || rawMsg.startsWith('WORKER_ERROR:') || lower.includes('worker')) {
+    return {
+      type: 'worker_error',
+      title: 'Storage Service Unavailable',
+      description: 'The document delivery service is temporarily unreachable. Please retry in a few moments.',
+      adminHint: 'Cloudflare Worker returned an error or route is not deployed.',
+    };
+  }
+
+  if (rawMsg.startsWith('MATERIAL_MISSING:') || lower.includes('material missing') || lower.includes('material not found')) {
+    return {
+      type: 'material_missing',
+      title: 'Document Not Found',
+      description: 'The study material associated with this link is no longer available in the repository.',
+      adminHint: 'The materialId associated with this share no longer exists.',
+    };
+  }
+
+  if (lower.includes('storage') || lower.includes('bucket')) {
+    return {
+      type: 'storage_error',
+      title: 'Storage Retrieval Failure',
+      description: 'The document file could not be retrieved from storage. Please notify the administrator.',
+      adminHint: 'R2 object key was not found or could not be streamed.',
+    };
+  }
+
+  if (lower.includes('network') || lower.includes('failed to fetch')) {
+    return {
+      type: 'network',
+      title: 'Connection Error',
+      description: 'Could not connect to the document server. Please check your internet connection and try again.',
+      adminHint: 'Client HTTP request failed due to offline network or CORS block.',
+    };
+  }
+
+  if (rawMsg.startsWith('INVALID_TOKEN:') || lower.includes('invalid access token')) {
+    return {
+      type: 'invalid',
+      title: 'Invalid Sharing Token',
+      description: 'The access token in this sharing link is malformed or invalid.',
+      adminHint: 'Token failed validation check (length or character set).',
+    };
+  }
+
+  return {
+    type: 'not_found',
+    title: 'Link Unavailable',
+    description: 'This private sharing link is unavailable or no longer active.',
+    adminHint: rawMsg,
+  };
+}
+
 export const PrivateAssignmentPage: React.FC = () => {
   const { token } = useParams<{ token: string }>();
 
   const [shareInfo, setShareInfo] = useState<PrivateSharePublicInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [errorType, setErrorType] = useState<'invalid' | 'expired' | 'revoked' | 'network' | null>(null);
+  const [diagnosticInfo, setDiagnosticInfo] = useState<DiagnosticInfo | null>(null);
   const [textPreviewContent, setTextPreviewContent] = useState<string | null>(null);
   const [isLoadingTextPreview, setIsLoadingTextPreview] = useState(false);
 
@@ -56,14 +166,16 @@ export const PrivateAssignmentPage: React.FC = () => {
   const loadShareData = async () => {
     if (!token) {
       setIsLoading(false);
-      setErrorMessage('No private link token provided.');
-      setErrorType('invalid');
+      setDiagnosticInfo({
+        type: 'invalid',
+        title: 'Missing Token',
+        description: 'No private sharing token was provided in the URL.',
+      });
       return;
     }
 
     setIsLoading(true);
-    setErrorMessage(null);
-    setErrorType(null);
+    setDiagnosticInfo(null);
 
     try {
       const data = await validatePrivateShare(token);
@@ -82,17 +194,10 @@ export const PrivateAssignmentPage: React.FC = () => {
           .finally(() => setIsLoadingTextPreview(false));
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setErrorMessage(msg);
-      if (msg.toLowerCase().includes('revoked')) {
-        setErrorType('revoked');
-      } else if (msg.toLowerCase().includes('expired')) {
-        setErrorType('expired');
-      } else if (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('unavailable')) {
-        setErrorType('invalid');
-      } else {
-        setErrorType('network');
-      }
+      const parsed = parseDiagnostics(err);
+      setDiagnosticInfo(parsed);
+      // Log diagnostic details safely without exposing the raw access token
+      console.warn(`[PrivateShare Diagnostics] Error type: ${parsed.type}, Detail: ${parsed.adminHint || 'none'}`);
     } finally {
       setIsLoading(false);
     }
@@ -141,22 +246,14 @@ export const PrivateAssignmentPage: React.FC = () => {
   }
 
   // ---------------------------------------------------------------------------
-  // 2. Error / Unavailable State
+  // 2. Error / Unavailable State with Rich Diagnostics
   // ---------------------------------------------------------------------------
-  if (errorMessage || !shareInfo) {
-    const errorTitle =
-      errorType === 'revoked'
-        ? 'Private Link Revoked'
-        : errorType === 'expired'
-        ? 'Private Link Expired'
-        : 'Link Unavailable';
-
-    const errorDesc =
-      errorType === 'revoked'
-        ? 'This private access link has been revoked by an administrator. The material is no longer accessible through this link.'
-        : errorType === 'expired'
-        ? 'This private link has passed its designated expiration date and time. Please contact the administrator if you need a renewed link.'
-        : 'This private sharing link is invalid, expired, or no longer available.';
+  if (diagnosticInfo || !shareInfo) {
+    const info = diagnosticInfo || {
+      type: 'not_found' as DiagnosticErrorType,
+      title: 'Link Unavailable',
+      description: 'This private sharing link is invalid, expired, or no longer available.',
+    };
 
     return (
       <div className="min-h-[75vh] flex items-center justify-center px-4 py-12">
@@ -166,9 +263,12 @@ export const PrivateAssignmentPage: React.FC = () => {
           </div>
 
           <div>
-            <h1 className="text-lg sm:text-xl font-extrabold text-slate-900">{errorTitle}</h1>
+            <div className="inline-block px-2.5 py-0.5 mb-2 rounded-full text-[10px] font-bold tracking-wider uppercase bg-slate-100 text-slate-600 border border-slate-200">
+              {info.type.replace('_', ' ')}
+            </div>
+            <h1 className="text-lg sm:text-xl font-extrabold text-slate-900">{info.title}</h1>
             <p className="text-xs sm:text-sm text-slate-600 mt-2 leading-relaxed">
-              {errorDesc}
+              {info.description}
             </p>
           </div>
 
