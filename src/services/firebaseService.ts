@@ -2121,7 +2121,7 @@ export async function uploadPdfToR2(
       reject(new Error('R2 PDF upload timed out.'));
     };
 
-    xhr.timeout = 60000;
+    xhr.timeout = 300000; // 5 minutes for large files up to 50 MB
     xhr.send(file);
   });
 }
@@ -2203,10 +2203,16 @@ export async function uploadPdfFile(
         };
       } catch (r2Err) {
         console.warn('R2 upload notice: Falling back to Firebase RTDB storage.', r2Err);
+        if (file.size > MAX_RTDB_PDF_SIZE_BYTES) {
+          const r2Msg = r2Err instanceof Error ? r2Err.message : String(r2Err);
+          throw new Error(
+            `Cloudflare R2 upload error: ${r2Msg}. Files larger than 6 MB cannot be stored in Realtime Database. Please retry your upload.`
+          );
+        }
       }
     } else {
       throw new Error(
-        `File size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds maximum allowed limit of 50 MB.`
+        'Maximum file size allowed is 50 MB.'
       );
     }
   }

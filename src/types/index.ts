@@ -188,5 +188,39 @@ export interface DashboardStats {
   categoryCounts: Record<AcademicCategory, number>;
 }
 
+export type SubmissionStatus = 'pending' | 'approved' | 'rejected';
+
+export type SubmissionCategory =
+  | 'notes'
+  | 'assignments'
+  | 'experiments'
+  | 'pyq'
+  | 'presentations'
+  | 'other';
+
+export interface StudentSubmission {
+  submissionId: string;
+  studentName: string;
+  email?: string;
+  college?: string;
+  materialTitle: string;
+  description?: string;
+  semesterId: string;
+  subjectId: string;
+  category: SubmissionCategory | AcademicCategory;
+  originalFilename: string;
+  safeFilename: string;
+  mimeType: string;
+  fileSize: number;
+  storageKey: string;
+  status: SubmissionStatus;
+  submittedAt: number;
+  approvedAt?: number;
+  approvedBy?: string;
+  rejectedAt?: number;
+  rejectedBy?: string;
+  publishedMaterialId?: string;
+}
+
 export * from './adminFeatures';
 

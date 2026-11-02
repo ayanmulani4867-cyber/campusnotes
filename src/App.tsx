@@ -28,6 +28,9 @@ const SubjectDetailPage = lazy(() =>
 const CategoryPage = lazy(() =>
   import('./pages/CategoryPage').then((m) => ({ default: m.CategoryPage }))
 );
+const ContributePage = lazy(() =>
+  import('./pages/ContributePage').then((m) => ({ default: m.ContributePage }))
+);
 const AboutPage = lazy(() =>
   import('./pages/AboutPage').then((m) => ({ default: m.AboutPage }))
 );
@@ -73,6 +76,7 @@ const AppContent: React.FC = () => {
             <Route path="/subjects/:subjectId" element={<SubjectDetailPage />} />
             <Route path="/category/:categorySlug" element={<CategoryPage />} />
             <Route path="/about" element={<AboutPage />} />
+            <Route path="/contribute" element={<ContributePage />} />
 
             {/* Admin Routes */}
             <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />

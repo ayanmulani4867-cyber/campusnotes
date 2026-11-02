@@ -355,7 +355,7 @@ export async function validateClientFile(
     const fileMB = (file.size / (1024 * 1024)).toFixed(1);
     return {
       valid: false,
-      error: `File size (${fileMB} MB) exceeds maximum allowed limit of ${limitMB} MB.`,
+      error: 'Maximum file size allowed is 50 MB.',
     };
   }
 

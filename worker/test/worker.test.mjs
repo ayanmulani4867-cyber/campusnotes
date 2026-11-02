@@ -4,7 +4,8 @@
 import test, { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 
-import worker, { parseByteRange } from '../src/index.ts';
+import worker from '../src/index.ts';
+import { parseByteRange } from '../src/utils.ts';
 import { setCustomJwksProvider, resetJwksCache } from '../src/auth.ts';
 
 // Mock in-memory R2Bucket implementation with RFC range and head support

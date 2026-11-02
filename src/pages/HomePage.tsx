@@ -4,6 +4,7 @@ import {
   Search,
   ArrowRight,
   BookOpen,
+  Upload,
 } from 'lucide-react';
 import { StudyMaterial, Subject, Semester, CATEGORIES } from '../types';
 import {
@@ -206,6 +207,17 @@ export const HomePage: React.FC = () => {
               </button>
             </div>
           </form>
+
+          {/* Public Contribution CTA */}
+          <div className="mt-4 flex items-center justify-center">
+            <Link
+              to="/contribute"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:from-blue-800 active:to-indigo-800 text-white text-xs sm:text-sm font-semibold rounded-lg shadow-sm hover:shadow transition-all"
+            >
+              <Upload className="w-4 h-4" />
+              <span>Contribute Study Materials</span>
+            </Link>
+          </div>
         </div>
       </section>
 

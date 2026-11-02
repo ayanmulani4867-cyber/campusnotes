@@ -6,7 +6,28 @@ export const DEFAULT_DATABASE_URL = 'https://campusnotes-e62cf-default-rtdb.fire
 export const DEFAULT_PROJECT_ID = 'campusnotes-e62cf';
 export const DEFAULT_STORAGE_BUCKET = 'campusnotes-e62cf.firebasestorage.app';
 export const DEFAULT_R2_WORKER_URL = 'https://campusnotes-pdf-api.ayanmull8886.workers.dev';
-export const R2_WORKER_URL = import.meta.env.VITE_R2_WORKER_URL || DEFAULT_R2_WORKER_URL;
+export const LOCAL_R2_WORKER_URL = 'http://127.0.0.1:8787';
+
+/**
+ * Resolves the appropriate R2 Worker URL based on environment.
+ * In local development (localhost / 127.0.0.1), defaults to local Wrangler Worker (http://127.0.0.1:8787)
+ * unless explicitly overridden by VITE_R2_WORKER_URL.
+ * In production builds / live domains, defaults to https://campusnotes-pdf-api.ayanmull8886.workers.dev.
+ */
+export function getR2WorkerUrl(): string {
+  if (import.meta.env.VITE_R2_WORKER_URL) {
+    return import.meta.env.VITE_R2_WORKER_URL;
+  }
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return LOCAL_R2_WORKER_URL;
+    }
+  }
+  return DEFAULT_R2_WORKER_URL;
+}
+
+export const R2_WORKER_URL = getR2WorkerUrl();
 
 // Read environment variables
 const apiKey = import.meta.env.VITE_FIREBASE_API_KEY || '';

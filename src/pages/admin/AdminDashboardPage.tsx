@@ -21,6 +21,7 @@ import {
   BarChart3,
   History,
   HeartPulse,
+  Inbox,
 } from 'lucide-react';
 import { updateAdminPassword } from '../../services/authService';
 import { Modal } from '../../components/common/Modal';
@@ -58,6 +59,8 @@ import { ReplacePdfModal } from '../../components/admin/ReplacePdfModal';
 import { VisitorAnalyticsSection } from '../../components/admin/VisitorAnalyticsSection';
 import { AdminActivityLogSection } from '../../components/admin/AdminActivityLogSection';
 import { WebsiteHealthSection } from '../../components/admin/WebsiteHealthSection';
+import { StudentContributionsSection } from '../../components/admin/StudentContributionsSection';
+import { fetchSubmissionsAdmin } from '../../services/contributionService';
 import { activityLogService } from '../../services/activityLogService';
 
 type AdminTab =
@@ -65,6 +68,7 @@ type AdminTab =
   | 'semesters'
   | 'subjects'
   | 'materials'
+  | 'contributions'
   | 'upload'
   | 'analytics'
   | 'activity'
@@ -82,6 +86,7 @@ export const AdminDashboardPage: React.FC = () => {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [semesters, setSemesters] = useState<Semester[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pendingContributionsCount, setPendingContributionsCount] = useState<number>(0);
 
   // Maintenance mode state
   const [maintenanceMode, setMaintenanceModeState] = useState(false);
@@ -171,6 +176,11 @@ export const AdminDashboardPage: React.FC = () => {
       setSubjects(subs);
       setSemesters(sems);
       setMaintenanceModeState(maint);
+
+      // Refresh pending contributions count
+      fetchSubmissionsAdmin('pending')
+        .then((subs) => setPendingContributionsCount(subs.length))
+        .catch(() => { });
 
       if (!uploadSemesterId && sems.length > 0) {
         setUploadSemesterId(sems[0].id);
@@ -583,6 +593,13 @@ export const AdminDashboardPage: React.FC = () => {
       count: materials.length,
     },
     {
+      id: 'contributions' as AdminTab,
+      label: 'Student Contributions',
+      icon: Inbox,
+      count: pendingContributionsCount > 0 ? pendingContributionsCount : undefined,
+      badge: pendingContributionsCount > 0 ? `${pendingContributionsCount} new` : undefined,
+    },
+    {
       id: 'analytics' as AdminTab,
       label: 'Visitor Analytics',
       icon: BarChart3,
@@ -645,11 +662,10 @@ export const AdminDashboardPage: React.FC = () => {
                   setActiveTab(item.id);
                   setMobileMenuOpen(false);
                 }}
-                className={`w-full min-h-[44px] flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-lg text-xs font-medium text-left transition-colors ${
-                  isSelected
+                className={`w-full min-h-[44px] flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-lg text-xs font-medium text-left transition-colors ${isSelected
                     ? 'bg-blue-50 text-blue-600 font-semibold'
                     : 'text-slate-700 hover:bg-slate-50 active:bg-slate-100'
-                }`}
+                  }`}
               >
                 <div className="flex items-center gap-2.5">
                   <Icon className={`w-4 h-4 ${isSelected ? 'text-blue-600' : 'text-slate-400'}`} />
@@ -657,9 +673,8 @@ export const AdminDashboardPage: React.FC = () => {
                 </div>
                 {item.count !== undefined && (
                   <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                      isSelected ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
-                    }`}
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${isSelected ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                      }`}
                   >
                     {item.count}
                   </span>
@@ -749,11 +764,10 @@ export const AdminDashboardPage: React.FC = () => {
                   key={item.id}
                   type="button"
                   onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center justify-between gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-left transition-colors ${
-                    isSelected
+                  className={`w-full flex items-center justify-between gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-left transition-colors ${isSelected
                       ? 'bg-blue-50 text-blue-600 font-semibold'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-2.5">
                     <Icon className={`w-4 h-4 ${isSelected ? 'text-blue-600' : 'text-slate-400'}`} />
@@ -761,9 +775,8 @@ export const AdminDashboardPage: React.FC = () => {
                   </div>
                   {item.count !== undefined && (
                     <span
-                      className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
-                        isSelected ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
-                      }`}
+                      className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${isSelected ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                        }`}
                     >
                       {item.count}
                     </span>
@@ -1015,11 +1028,10 @@ export const AdminDashboardPage: React.FC = () => {
                             </td>
                             <td className="py-2.5 px-4">
                               <span
-                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium ${
-                                  mat.published
+                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium ${mat.published
                                     ? 'bg-slate-100 text-slate-800 border border-slate-200'
                                     : 'bg-amber-50 text-amber-800 border border-amber-200'
-                                }`}
+                                  }`}
                               >
                                 {mat.published && (
                                   <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
@@ -1073,336 +1085,333 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
 
             <>
-            {/* Simple Filters Row */}
-            <div className="bg-white p-3.5 rounded-lg border border-slate-200 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
-                <div className="relative">
-                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search by title or filename..."
-                    className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
-                  />
+              {/* Simple Filters Row */}
+              <div className="bg-white p-3.5 rounded-lg border border-slate-200 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search by title or filename..."
+                      className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
+                    />
+                  </div>
+
+                  <select
+                    value={filterSemester}
+                    onChange={(e) => {
+                      setFilterSemester(e.target.value);
+                      setFilterSubject('');
+                    }}
+                    className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 font-medium focus:ring-2 focus:ring-blue-600"
+                  >
+                    <option value="">All Semesters</option>
+                    {semesters.map((sem) => (
+                      <option key={sem.id} value={sem.id}>
+                        {sem.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={filterSubject}
+                    onChange={(e) => setFilterSubject(e.target.value)}
+                    className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 font-medium focus:ring-2 focus:ring-blue-600"
+                  >
+                    <option value="">All Subjects</option>
+                    {groupedSubjects
+                      .filter((group) => {
+                        if (!filterSemester) return true;
+                        const targetSem = semesters.find((s) => s.id === filterSemester);
+                        return targetSem ? group.semesterName === targetSem.name : true;
+                      })
+                      .map((group) => (
+                        <optgroup key={group.semesterName} label={group.semesterName}>
+                          {group.subjects.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.code} — {s.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                  </select>
+
+                  <select
+                    value={filterType}
+                    onChange={(e) => setFilterType(e.target.value)}
+                    className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 font-medium focus:ring-2 focus:ring-blue-600"
+                  >
+                    <option value="">All Material Types</option>
+                    {MATERIAL_TYPE_OPTIONS.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value)}
+                    className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 font-medium focus:ring-2 focus:ring-blue-600"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="published">Published</option>
+                    <option value="drafts">Drafts Only</option>
+                  </select>
                 </div>
 
-                <select
-                  value={filterSemester}
-                  onChange={(e) => {
-                    setFilterSemester(e.target.value);
-                    setFilterSubject('');
-                  }}
-                  className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 font-medium focus:ring-2 focus:ring-blue-600"
-                >
-                  <option value="">All Semesters</option>
-                  {semesters.map((sem) => (
-                    <option key={sem.id} value={sem.id}>
-                      {sem.name}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  value={filterSubject}
-                  onChange={(e) => setFilterSubject(e.target.value)}
-                  className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 font-medium focus:ring-2 focus:ring-blue-600"
-                >
-                  <option value="">All Subjects</option>
-                  {groupedSubjects
-                    .filter((group) => {
-                      if (!filterSemester) return true;
-                      const targetSem = semesters.find((s) => s.id === filterSemester);
-                      return targetSem ? group.semesterName === targetSem.name : true;
-                    })
-                    .map((group) => (
-                      <optgroup key={group.semesterName} label={group.semesterName}>
-                        {group.subjects.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.code} — {s.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                </select>
-
-                <select
-                  value={filterType}
-                  onChange={(e) => setFilterType(e.target.value)}
-                  className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 font-medium focus:ring-2 focus:ring-blue-600"
-                >
-                  <option value="">All Material Types</option>
-                  {MATERIAL_TYPE_OPTIONS.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 font-medium focus:ring-2 focus:ring-blue-600"
-                >
-                  <option value="all">All Statuses</option>
-                  <option value="published">Published</option>
-                  <option value="drafts">Drafts Only</option>
-                </select>
+                {(filterSemester || filterSubject || filterType || filterStatus !== 'all' || searchQuery) && (
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFilterSemester('');
+                        setFilterSubject('');
+                        setFilterType('');
+                        setFilterStatus('all');
+                        setSearchQuery('');
+                      }}
+                      className="font-medium text-blue-600 hover:underline"
+                    >
+                      Reset filters
+                    </button>
+                    <span className="text-slate-500">
+                      Showing {filteredMaterials.length} of {materials.length} items
+                    </span>
+                  </div>
+                )}
               </div>
 
-              {(filterSemester || filterSubject || filterType || filterStatus !== 'all' || searchQuery) && (
-                <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFilterSemester('');
-                      setFilterSubject('');
-                      setFilterType('');
-                      setFilterStatus('all');
-                      setSearchQuery('');
-                    }}
-                    className="font-medium text-blue-600 hover:underline"
-                  >
-                    Reset filters
-                  </button>
-                  <span className="text-slate-500">
-                    Showing {filteredMaterials.length} of {materials.length} items
-                  </span>
-                </div>
-              )}
-            </div>
+              {/* Desktop Table */}
+              <div className="hidden md:block bg-white rounded-lg border border-slate-200 overflow-hidden">
+                {loading ? (
+                  <div className="p-10 text-center text-slate-400">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-600" />
+                    <p className="text-xs">Loading materials...</p>
+                  </div>
+                ) : filteredMaterials.length === 0 ? (
+                  <div className="p-10 text-center">
+                    <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <h4 className="text-sm font-semibold text-slate-800">No Materials Found</h4>
+                    <p className="text-xs text-slate-500 mt-1">Adjust your search or filters.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
+                          <th className="py-3 px-3.5">Title</th>
+                          <th className="py-3 px-3.5">Subject</th>
+                          <th className="py-3 px-3.5">Material Type</th>
+                          <th className="py-3 px-3.5">PDF Filename</th>
+                          <th className="py-3 px-3.5">Status</th>
+                          <th className="py-3 px-3.5 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filteredMaterials.map((mat) => {
+                          const subject = subjects.find((s) => s.id === mat.subjectId);
+                          const typeOpt = MATERIAL_TYPE_OPTIONS.find((t) => t.id === mat.category);
 
-            {/* Desktop Table */}
-            <div className="hidden md:block bg-white rounded-lg border border-slate-200 overflow-hidden">
-              {loading ? (
-                <div className="p-10 text-center text-slate-400">
-                  <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-600" />
-                  <p className="text-xs">Loading materials...</p>
-                </div>
-              ) : filteredMaterials.length === 0 ? (
-                <div className="p-10 text-center">
-                  <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  <h4 className="text-sm font-semibold text-slate-800">No Materials Found</h4>
-                  <p className="text-xs text-slate-500 mt-1">Adjust your search or filters.</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
-                        <th className="py-3 px-3.5">Title</th>
-                        <th className="py-3 px-3.5">Subject</th>
-                        <th className="py-3 px-3.5">Material Type</th>
-                        <th className="py-3 px-3.5">PDF Filename</th>
-                        <th className="py-3 px-3.5">Status</th>
-                        <th className="py-3 px-3.5 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {filteredMaterials.map((mat) => {
-                        const subject = subjects.find((s) => s.id === mat.subjectId);
-                        const typeOpt = MATERIAL_TYPE_OPTIONS.find((t) => t.id === mat.category);
+                          return (
+                            <tr key={mat.id} className="hover:bg-slate-50/70 transition-colors">
+                              <td className="py-3 px-3.5 max-w-xs">
+                                <p className="font-semibold text-slate-900 text-xs sm:text-sm truncate">
+                                  {mat.title}
+                                </p>
+                                <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-500">
+                                  <span>{mat.academicYear}</span>
+                                  {mat.assignmentNumber && <span>&bull; Assignment #{mat.assignmentNumber}</span>}
+                                  {mat.experimentNumber && <span>&bull; Experiment #{mat.experimentNumber}</span>}
+                                  {mat.unitNumber && <span>&bull; Unit #{mat.unitNumber}</span>}
+                                </div>
+                              </td>
 
-                        return (
-                          <tr key={mat.id} className="hover:bg-slate-50/70 transition-colors">
-                            <td className="py-3 px-3.5 max-w-xs">
-                              <p className="font-semibold text-slate-900 text-xs sm:text-sm truncate">
-                                {mat.title}
-                              </p>
-                              <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-500">
-                                <span>{mat.academicYear}</span>
-                                {mat.assignmentNumber && <span>&bull; Assignment #{mat.assignmentNumber}</span>}
-                                {mat.experimentNumber && <span>&bull; Experiment #{mat.experimentNumber}</span>}
-                                {mat.unitNumber && <span>&bull; Unit #{mat.unitNumber}</span>}
-                              </div>
-                            </td>
+                              <td className="py-3 px-3.5">
+                                <span className="font-mono text-[11px] font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                                  {subject ? subject.code : '—'}
+                                </span>
+                                <p className="text-[11px] text-slate-600 mt-0.5 truncate max-w-[150px]">
+                                  {subject ? subject.name : 'Unknown Subject'}
+                                </p>
+                              </td>
 
-                            <td className="py-3 px-3.5">
-                              <span className="font-mono text-[11px] font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                                {subject ? subject.code : '—'}
-                              </span>
-                              <p className="text-[11px] text-slate-600 mt-0.5 truncate max-w-[150px]">
-                                {subject ? subject.name : 'Unknown Subject'}
-                              </p>
-                            </td>
+                              <td className="py-3 px-3.5">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                                  {typeOpt ? typeOpt.label : mat.category}
+                                </span>
+                              </td>
 
-                            <td className="py-3 px-3.5">
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
-                                {typeOpt ? typeOpt.label : mat.category}
-                              </span>
-                            </td>
+                              <td className="py-3 px-3.5">
+                                <a
+                                  href={`/materials/${mat.id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="font-medium text-slate-800 hover:text-blue-600 truncate max-w-[160px] block"
+                                  title={`Open Reader: ${mat.fileName}`}
+                                >
+                                  {mat.fileName}
+                                </a>
+                                <p className="text-[11px] text-slate-400">
+                                  {formatFileSize(mat.fileSize)}
+                                </p>
+                              </td>
 
-                            <td className="py-3 px-3.5">
-                              <a
-                                href={`/materials/${mat.id}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="font-medium text-slate-800 hover:text-blue-600 truncate max-w-[160px] block"
-                                title={`Open Reader: ${mat.fileName}`}
-                              >
-                                {mat.fileName}
-                              </a>
-                              <p className="text-[11px] text-slate-400">
-                                {formatFileSize(mat.fileSize)}
-                              </p>
-                            </td>
-
-                            <td className="py-3 px-3.5">
-                              <button
-                                type="button"
-                                onClick={() => handleTogglePublish(mat)}
-                                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-colors ${
-                                  mat.published
-                                    ? 'bg-slate-100 text-slate-800 border border-slate-200'
-                                    : 'bg-amber-50 text-amber-800 border border-amber-200'
-                                }`}
-                                title="Click to toggle publish status"
-                              >
-                                <span
-                                  className={`w-1.5 h-1.5 rounded-full ${
-                                    mat.published ? 'bg-green-500' : 'bg-amber-500'
-                                  }`}
-                                />
-                                <span>{mat.published ? 'Published' : 'Draft'}</span>
-                              </button>
-                            </td>
-
-                            <td className="py-3 px-3.5 text-right whitespace-nowrap">
-                              <div className="flex items-center justify-end gap-1.5">
-
+                              <td className="py-3 px-3.5">
                                 <button
                                   type="button"
-                                  onClick={() => setEditingMaterial(mat)}
-                                  className="px-2.5 py-1 rounded-md text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors inline-flex items-center gap-1.5"
+                                  onClick={() => handleTogglePublish(mat)}
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-colors ${mat.published
+                                      ? 'bg-slate-100 text-slate-800 border border-slate-200'
+                                      : 'bg-amber-50 text-amber-800 border border-amber-200'
+                                    }`}
+                                  title="Click to toggle publish status"
                                 >
-                                  <Edit2 className="w-3 h-3 text-slate-500" />
-                                  <span>Edit</span>
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full ${mat.published ? 'bg-green-500' : 'bg-amber-500'
+                                      }`}
+                                  />
+                                  <span>{mat.published ? 'Published' : 'Draft'}</span>
                                 </button>
+                              </td>
 
-                                <button
-                                  type="button"
-                                  onClick={() => setReplacingMaterial(mat)}
-                                  className="px-2.5 py-1 rounded-md text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors inline-flex items-center gap-1.5"
-                                >
-                                  <FileCheck className="w-3 h-3 text-slate-500" />
-                                  <span>Replace PDF</span>
-                                </button>
+                              <td className="py-3 px-3.5 text-right whitespace-nowrap">
+                                <div className="flex items-center justify-end gap-1.5">
 
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteMaterial(mat)}
-                                  className="p-1.5 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                                  title="Delete Material"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingMaterial(mat)}
+                                    className="px-2.5 py-1 rounded-md text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors inline-flex items-center gap-1.5"
+                                  >
+                                    <Edit2 className="w-3 h-3 text-slate-500" />
+                                    <span>Edit</span>
+                                  </button>
 
-            {/* Mobile Card View */}
-            <div className="md:hidden space-y-3">
-              {loading ? (
-                <div className="p-8 text-center text-slate-400 bg-white rounded-lg border border-slate-200">
-                  <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-600" />
-                  <p className="text-xs">Loading materials...</p>
-                </div>
-              ) : filteredMaterials.length === 0 ? (
-                <div className="p-8 text-center bg-white rounded-lg border border-slate-200">
-                  <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  <h4 className="text-sm font-semibold text-slate-800">No Materials Found</h4>
-                </div>
-              ) : (
-                filteredMaterials.map((mat) => {
-                  const subject = subjects.find((s) => s.id === mat.subjectId);
-                  const typeOpt = MATERIAL_TYPE_OPTIONS.find((t) => t.id === mat.category);
+                                  <button
+                                    type="button"
+                                    onClick={() => setReplacingMaterial(mat)}
+                                    className="px-2.5 py-1 rounded-md text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors inline-flex items-center gap-1.5"
+                                  >
+                                    <FileCheck className="w-3 h-3 text-slate-500" />
+                                    <span>Replace PDF</span>
+                                  </button>
 
-                  return (
-                    <div key={mat.id} className="bg-white p-4 rounded-lg border border-slate-200 space-y-2.5">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-sm text-slate-900 leading-snug">
-                            {mat.title}
-                          </h4>
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            {subject ? `${subject.code} — ${subject.name}` : mat.subjectId}
-                          </p>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteMaterial(mat)}
+                                    className="p-1.5 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                    title="Delete Material"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3">
+                {loading ? (
+                  <div className="p-8 text-center text-slate-400 bg-white rounded-lg border border-slate-200">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-600" />
+                    <p className="text-xs">Loading materials...</p>
+                  </div>
+                ) : filteredMaterials.length === 0 ? (
+                  <div className="p-8 text-center bg-white rounded-lg border border-slate-200">
+                    <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <h4 className="text-sm font-semibold text-slate-800">No Materials Found</h4>
+                  </div>
+                ) : (
+                  filteredMaterials.map((mat) => {
+                    const subject = subjects.find((s) => s.id === mat.subjectId);
+                    const typeOpt = MATERIAL_TYPE_OPTIONS.find((t) => t.id === mat.category);
+
+                    return (
+                      <div key={mat.id} className="bg-white p-4 rounded-lg border border-slate-200 space-y-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-sm text-slate-900 leading-snug">
+                              {mat.title}
+                            </h4>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              {subject ? `${subject.code} — ${subject.name}` : mat.subjectId}
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePublish(mat)}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium flex-shrink-0 ${mat.published
+                                ? 'bg-slate-100 text-slate-800 border border-slate-200'
+                                : 'bg-amber-50 text-amber-800 border border-amber-200'
+                              }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${mat.published ? 'bg-green-500' : 'bg-amber-500'}`} />
+                            <span>{mat.published ? 'Published' : 'Draft'}</span>
+                          </button>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => handleTogglePublish(mat)}
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium flex-shrink-0 ${
-                            mat.published
-                              ? 'bg-slate-100 text-slate-800 border border-slate-200'
-                              : 'bg-amber-50 text-amber-800 border border-amber-200'
-                          }`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${mat.published ? 'bg-green-500' : 'bg-amber-500'}`} />
-                          <span>{mat.published ? 'Published' : 'Draft'}</span>
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                          <span className="px-2 py-0.5 rounded bg-slate-100 font-medium text-slate-700 border border-slate-200">
+                            {typeOpt ? typeOpt.label : mat.category}
+                          </span>
+                          {mat.assignmentNumber && <span>Assign #{mat.assignmentNumber}</span>}
+                          {mat.experimentNumber && <span>Exp #{mat.experimentNumber}</span>}
+                          {mat.unitNumber && <span>Unit #{mat.unitNumber}</span>}
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
+                          <a
+                            href={`/materials/${mat.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-slate-800 hover:text-blue-600 font-medium truncate max-w-[180px]"
+                          >
+                            {mat.fileName}
+                          </a>
+                          <span className="text-slate-400 text-[11px]">{formatFileSize(mat.fileSize)}</span>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+
+                          <button
+                            type="button"
+                            onClick={() => setEditingMaterial(mat)}
+                            className="flex-1 min-h-[40px] inline-flex items-center justify-center py-2 px-2 bg-white text-slate-700 hover:bg-slate-50 active:bg-slate-100 rounded-lg text-xs font-semibold border border-slate-200 text-center"
+                          >
+                            Edit
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setReplacingMaterial(mat)}
+                            className="flex-1 min-h-[40px] inline-flex items-center justify-center py-2 px-2 bg-white text-slate-700 hover:bg-slate-50 active:bg-slate-100 rounded-lg text-xs font-semibold border border-slate-200 text-center"
+                          >
+                            Replace PDF
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteMaterial(mat)}
+                            aria-label={`Delete ${mat.title}`}
+                            className="min-h-[40px] min-w-[40px] inline-flex items-center justify-center p-2 text-slate-400 hover:text-rose-600 bg-white border border-slate-200 hover:bg-rose-50 active:bg-rose-100 rounded-lg shrink-0"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-
-                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                        <span className="px-2 py-0.5 rounded bg-slate-100 font-medium text-slate-700 border border-slate-200">
-                          {typeOpt ? typeOpt.label : mat.category}
-                        </span>
-                        {mat.assignmentNumber && <span>Assign #{mat.assignmentNumber}</span>}
-                        {mat.experimentNumber && <span>Exp #{mat.experimentNumber}</span>}
-                        {mat.unitNumber && <span>Unit #{mat.unitNumber}</span>}
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
-                        <a
-                          href={`/materials/${mat.id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-slate-800 hover:text-blue-600 font-medium truncate max-w-[180px]"
-                        >
-                          {mat.fileName}
-                        </a>
-                        <span className="text-slate-400 text-[11px]">{formatFileSize(mat.fileSize)}</span>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
-
-                        <button
-                          type="button"
-                          onClick={() => setEditingMaterial(mat)}
-                          className="flex-1 min-h-[40px] inline-flex items-center justify-center py-2 px-2 bg-white text-slate-700 hover:bg-slate-50 active:bg-slate-100 rounded-lg text-xs font-semibold border border-slate-200 text-center"
-                        >
-                          Edit
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setReplacingMaterial(mat)}
-                          className="flex-1 min-h-[40px] inline-flex items-center justify-center py-2 px-2 bg-white text-slate-700 hover:bg-slate-50 active:bg-slate-100 rounded-lg text-xs font-semibold border border-slate-200 text-center"
-                        >
-                          Replace PDF
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteMaterial(mat)}
-                          aria-label={`Delete ${mat.title}`}
-                          className="min-h-[40px] min-w-[40px] inline-flex items-center justify-center p-2 text-slate-400 hover:text-rose-600 bg-white border border-slate-200 hover:bg-rose-50 active:bg-rose-100 rounded-lg shrink-0"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
+                    );
+                  })
+                )}
+              </div>
             </>
           </div>
         )}
@@ -1410,6 +1419,15 @@ export const AdminDashboardPage: React.FC = () => {
         {/* ============================================================== */}
         {/* 3. UPLOAD MATERIAL TAB                                         */}
         {/* ============================================================== */}
+        {/* STUDENT CONTRIBUTIONS TAB */}
+        {activeTab === 'contributions' && (
+          <StudentContributionsSection
+            semesters={semesters}
+            subjects={subjects}
+            onRefreshParent={refreshData}
+          />
+        )}
+
         {activeTab === 'upload' && (
           <div className="max-w-3xl bg-white rounded-lg border border-slate-200 p-6 sm:p-8 space-y-6">
             <div className="border-b border-slate-200 pb-3">
@@ -1541,8 +1559,8 @@ export const AdminDashboardPage: React.FC = () => {
                     {uploadType === 'assignments'
                       ? 'Assignment Number (Optional)'
                       : uploadType === 'experiments'
-                      ? 'Experiment Number (Optional)'
-                      : 'Unit Number (Optional)'}
+                        ? 'Experiment Number (Optional)'
+                        : 'Unit Number (Optional)'}
                   </label>
                   <input
                     type="number"
@@ -1638,11 +1656,10 @@ export const AdminDashboardPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setUploadPublished(!uploadPublished)}
-                  className={`px-3 py-1 rounded-md text-xs font-medium border transition-colors ${
-                    uploadPublished
+                  className={`px-3 py-1 rounded-md text-xs font-medium border transition-colors ${uploadPublished
                       ? 'bg-white text-slate-800 border-slate-300 shadow-sm'
                       : 'bg-amber-50 text-amber-800 border-amber-200'
-                  }`}
+                    }`}
                 >
                   {uploadPublished ? 'Published' : 'Draft'}
                 </button>
@@ -1722,16 +1739,14 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
 
             <div
-              className={`p-4 rounded-xl border flex items-center gap-3.5 ${
-                maintenanceMode
+              className={`p-4 rounded-xl border flex items-center gap-3.5 ${maintenanceMode
                   ? 'bg-amber-50 border-amber-200 text-amber-900'
                   : 'bg-slate-50 border-slate-200 text-slate-800'
-              }`}
+                }`}
             >
               <div
-                className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                  maintenanceMode ? 'bg-amber-200 text-amber-900' : 'bg-slate-200 text-slate-700'
-                }`}
+                className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${maintenanceMode ? 'bg-amber-200 text-amber-900' : 'bg-slate-200 text-slate-700'
+                  }`}
               >
                 <Wrench className="w-5 h-5" />
               </div>
@@ -1753,19 +1768,18 @@ export const AdminDashboardPage: React.FC = () => {
                 type="button"
                 onClick={handleToggleMaintenance}
                 disabled={isTogglingMaintenance}
-                className={`w-full py-2.5 rounded-lg text-xs font-semibold text-white transition-colors flex items-center justify-center gap-2 ${
-                  maintenanceMode
+                className={`w-full py-2.5 rounded-lg text-xs font-semibold text-white transition-colors flex items-center justify-center gap-2 ${maintenanceMode
                     ? 'bg-slate-700 hover:bg-slate-800'
                     : 'bg-amber-600 hover:bg-amber-700'
-                }`}
+                  }`}
               >
                 <Wrench className="w-4 h-4" />
                 <span>
                   {isTogglingMaintenance
                     ? 'Updating...'
                     : maintenanceMode
-                    ? 'Disable Maintenance Mode'
-                    : 'Enable Maintenance Mode'}
+                      ? 'Disable Maintenance Mode'
+                      : 'Enable Maintenance Mode'}
                 </span>
               </button>
             </div>

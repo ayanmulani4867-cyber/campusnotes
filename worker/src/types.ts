@@ -94,3 +94,31 @@ export interface AdminAuthResult {
   email?: string;
   error?: string;
 }
+
+export type SubmissionStatus = 'pending' | 'approved' | 'rejected';
+
+export interface StudentSubmission {
+  submissionId: string;
+  studentName: string;
+  email?: string;
+  college?: string;
+  materialTitle: string;
+  description?: string;
+  semesterId: string;
+  subjectId: string;
+  category: string;
+  originalFilename: string;
+  safeFilename: string;
+  mimeType: string;
+  fileSize: number;
+  storageKey: string;
+  status: SubmissionStatus;
+  submittedAt: number;
+  approvedAt?: number;
+  approvedBy?: string;
+  rejectedAt?: number;
+  rejectedBy?: string;
+  publishedMaterialId?: string;
+  uploadToken?: string;
+  tokenExpiresAt?: number;
+}

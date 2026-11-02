@@ -113,6 +113,11 @@ test('PdfViewer automatically activates reader after download using getCachedPdf
 console.log('\n--- Test Suite 3: Cloudflare Worker Streaming & Header Optimization ---');
 
 const workerCode = fs.readFileSync('worker/src/index.ts', 'utf8');
+const workerUtilsCode = fs.existsSync('worker/src/utils.ts')
+  ? fs.readFileSync('worker/src/utils.ts', 'utf8')
+  : '';
+// Combined for assertions that may live in either file
+const workerCodeAll = workerCode + workerUtilsCode;
 
 test('Worker streams GET responses directly in single R2 call when no Range header', () => {
   assert(workerCode.includes("request.method === 'GET' && !rangeHeader"), 'Worker missing optimized single R2 call path for full GET');
@@ -120,7 +125,7 @@ test('Worker streams GET responses directly in single R2 call when no Range head
 });
 
 test('Worker sanitizeFilename ensures .pdf extension is always present', () => {
-  assert(workerCode.includes("clean.toLowerCase().endsWith('.pdf') ? clean : `${clean}.pdf`"), 'Worker sanitizeFilename must guarantee .pdf extension');
+  assert(workerCodeAll.includes("clean.toLowerCase().endsWith('.pdf') ? clean : `${clean}.pdf`"), 'Worker sanitizeFilename must guarantee .pdf extension');
 });
 
 test('Worker Content-Disposition includes UTF-8 RFC 6266 filename* attribute', () => {

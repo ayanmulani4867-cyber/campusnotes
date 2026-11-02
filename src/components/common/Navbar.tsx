@@ -85,6 +85,17 @@ export const Navbar: React.FC = () => {
               Materials
             </Link>
 
+            <Link
+              to="/contribute"
+              className={`px-3 py-1.5 rounded-md transition-colors ${
+                isActive('/contribute')
+                  ? 'text-blue-600 bg-blue-50 font-semibold'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              Contribute
+            </Link>
+
             {/* Secondary navigation inside one simple menu */}
             <div className="relative">
               <button
@@ -218,6 +229,15 @@ export const Navbar: React.FC = () => {
           >
             <FileText className="w-4 h-4 text-blue-600" />
             <span>All Materials</span>
+          </Link>
+
+          <Link
+            to="/contribute"
+            onClick={() => setMobileMenuOpen(false)}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold text-blue-600 bg-blue-50 active:bg-blue-100 min-h-[44px]"
+          >
+            <FileText className="w-4 h-4 text-blue-600" />
+            <span>Contribute Materials</span>
           </Link>
 
           <Link
