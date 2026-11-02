@@ -40,6 +40,7 @@ const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 
 // In-memory active upload tokens for secure two-step public submissions
 interface ActiveUploadToken {
+  uploadToken?: string;
   submissionId: string;
   expiresAt: number;
   expectedSizeBytes: number;
@@ -257,8 +258,9 @@ export default {
       const uploadToken = `tok_${Date.now()}_${Math.random().toString(36).substring(2, 12)}`;
 
       // Save token state for binary upload (15 min expiry)
-      activeUploadTokens.set(uploadToken, {
+      const tokenRecord: ActiveUploadToken = {
         submissionId,
+        uploadToken,
         expiresAt: Date.now() + 15 * 60 * 1000,
         expectedSizeBytes: fileSize,
         originalFilename: fileName,
@@ -274,7 +276,17 @@ export default {
           subjectId,
           category,
         },
-      });
+      };
+      activeUploadTokens.set(uploadToken, tokenRecord);
+      try {
+        await env.PDF_BUCKET.put(
+          `pending_submissions/${submissionId}/_init.json`,
+          JSON.stringify(tokenRecord),
+          { httpMetadata: { contentType: 'application/json' } }
+        );
+      } catch (initSaveErr) {
+        console.error('Failed to persist token to R2:', initSaveErr);
+      }
 
       return jsonResponse(
         {
@@ -295,7 +307,21 @@ export default {
       const submissionId = decodeURIComponent(subUploadMatch[1]);
       const uploadToken = request.headers.get('X-Upload-Token') || url.searchParams.get('token') || '';
 
-      const tokenData = activeUploadTokens.get(uploadToken);
+      let tokenData = activeUploadTokens.get(uploadToken);
+      if (!tokenData || tokenData.submissionId !== submissionId) {
+        try {
+          const initObj = await env.PDF_BUCKET.get(`pending_submissions/${submissionId}/_init.json`);
+          if (initObj) {
+            const raw = await initObj.text();
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.uploadToken === uploadToken) {
+              tokenData = parsed;
+            }
+          }
+        } catch (r2TokenErr) {
+          console.error('Failed to read persistent token from R2:', r2TokenErr);
+        }
+      }
       if (!tokenData || tokenData.submissionId !== submissionId || Date.now() > tokenData.expiresAt) {
         return jsonResponse(
           { error: 'Invalid, missing, or expired upload token. Please restart your submission.' },
@@ -373,6 +399,9 @@ export default {
       // Invalidate cache
       submissionMetadataCache.set(submissionId, submissionRecord);
       activeUploadTokens.delete(uploadToken);
+      try {
+        await env.PDF_BUCKET.delete(`pending_submissions/${submissionId}/_init.json`);
+      } catch {}
 
       return jsonResponse(
         {
