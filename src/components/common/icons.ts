@@ -62,6 +62,7 @@ const Check = /* @__PURE__ */ createLucideIcon('check', [["path", { "d": "M20 6 
 const CircleCheckBig = /* @__PURE__ */ createLucideIcon('circle-check-big', [["path", { "d": "M21.801 10A10 10 0 1 1 17 3.335", "key": "yps3ct" }], ["path", { "d": "m9 11 3 3L22 4", "key": "1pflzl" }]]);
 const CircleCheck = /* @__PURE__ */ createLucideIcon('circle-check', [["circle", { "cx": "12", "cy": "12", "r": "10", "key": "1mglay" }], ["path", { "d": "m16 9-5.5 5.5L8 12", "key": "xofnsj" }]]);
 const ChevronDown = /* @__PURE__ */ createLucideIcon('chevron-down', [["path", { "d": "m6 9 6 6 6-6", "key": "qrunsl" }]]);
+const ChevronRight = /* @__PURE__ */ createLucideIcon('chevron-right', [["path", { "d": "m9 18 6-6-6-6", "key": "mthhwq" }]]);
 const ChevronUp = /* @__PURE__ */ createLucideIcon('chevron-up', [["path", { "d": "m18 15-6-6-6 6", "key": "153udz" }]]);
 const Clock = /* @__PURE__ */ createLucideIcon('clock', [["circle", { "cx": "12", "cy": "12", "r": "10", "key": "1mglay" }], ["path", { "d": "M12 6v6l4 2", "key": "mmk7yg" }]]);
 const Compass = /* @__PURE__ */ createLucideIcon('compass', [["circle", { "cx": "12", "cy": "12", "r": "10", "key": "1mglay" }], ["path", { "d": "m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z", "key": "9ktpf1" }]]);
@@ -94,6 +95,7 @@ const LayoutDashboard = /* @__PURE__ */ createLucideIcon('layout-dashboard', [["
 const Lock = /* @__PURE__ */ createLucideIcon('lock', [["rect", { "width": "18", "height": "11", "x": "3", "y": "11", "rx": "2", "ry": "2", "key": "1w4ew1" }], ["path", { "d": "M7 11V7a5 5 0 0 1 10 0v4", "key": "fwvmzm" }]]);
 const LogOut = /* @__PURE__ */ createLucideIcon('log-out', [["path", { "d": "m16 17 5-5-5-5", "key": "1bji2h" }], ["path", { "d": "M21 12H9", "key": "dn1m92" }], ["path", { "d": "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4", "key": "1uf3rs" }]]);
 const Menu = /* @__PURE__ */ createLucideIcon('menu', [["path", { "d": "M4 5h16", "key": "1tepv9" }], ["path", { "d": "M4 12h16", "key": "1lakjw" }], ["path", { "d": "M4 19h16", "key": "1djgab" }]]);
+const MoreHorizontal = /* @__PURE__ */ createLucideIcon('ellipsis', [["circle", { "cx": "12", "cy": "12", "r": "1", "key": "41hilf" }], ["circle", { "cx": "19", "cy": "12", "r": "1", "key": "1wjl8i" }], ["circle", { "cx": "5", "cy": "12", "r": "1", "key": "4nx4da" }]]);
 const Plus = /* @__PURE__ */ createLucideIcon('plus', [["path", { "d": "M5 12h14", "key": "1ays0h" }], ["path", { "d": "M12 5v14", "key": "s699le" }]]);
 const RefreshCw = /* @__PURE__ */ createLucideIcon('refresh-cw', [["path", { "d": "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8", "key": "v9h5vc" }], ["path", { "d": "M21 3v5h-5", "key": "1q7to0" }], ["path", { "d": "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16", "key": "3uifl3" }], ["path", { "d": "M8 16H3v5", "key": "1cv678" }]]);
 const RotateCcw = /* @__PURE__ */ createLucideIcon('rotate-ccw', [["path", { "d": "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", "key": "1357e3" }], ["path", { "d": "M3 3v5h5", "key": "1xhq8a" }]]);
@@ -141,6 +143,7 @@ export {
   CircleCheckBig as CheckCircle,
   CircleCheck as CheckCircle2,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Clock,
   Compass,
@@ -179,6 +182,7 @@ export {
   Mail,
   Menu,
   MessageCircle,
+  MoreHorizontal,
   Plus,
   Presentation,
   RefreshCw,

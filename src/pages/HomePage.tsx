@@ -171,29 +171,29 @@ export const HomePage: React.FC = () => {
           <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-900 break-words">
             CampusNotes
           </h1>
-          <p className="mt-2 text-xs sm:text-base text-slate-600 max-w-xl mx-auto">
+          <p className="mt-2 text-xs sm:text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
             Clean, verified study materials, assignments, lecture notes, and lab practicals for engineering students.
           </p>
 
           {/* Simple Search Bar */}
           <form
             onSubmit={handleSearchSubmit}
-            className="mt-4 sm:mt-5 max-w-lg mx-auto relative"
+            className="mt-4 sm:mt-5 max-w-md mx-auto relative w-full"
           >
-            <div className="relative flex items-center bg-slate-50 border border-slate-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-600 focus-within:border-blue-600 focus-within:bg-white transition-all shadow-sm">
-              <Search className="w-4 sm:w-5 h-4 sm:h-5 text-slate-400 ml-3 flex-shrink-0" />
+            <div className="relative flex items-center bg-white border border-slate-300 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-600 focus-within:border-blue-600 transition-all shadow-xs">
+              <Search className="w-4 h-4 text-slate-400 ml-3.5 flex-shrink-0" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search subject, assignment, unit, topic..."
-                className="w-full min-h-[44px] py-2 pl-2.5 pr-24 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none bg-transparent"
+                placeholder="Search subjects, materials, or topics..."
+                className="w-full min-h-[44px] py-2 pl-2.5 pr-20 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none bg-transparent"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="mr-1 min-h-[30px] px-2 text-xs text-slate-400 hover:text-slate-600 font-medium"
+                  className="mr-1 min-h-[30px] px-2 text-xs text-slate-400 hover:text-slate-600 font-medium cursor-pointer"
                   aria-label="Clear search"
                 >
                   Clear
@@ -201,7 +201,7 @@ export const HomePage: React.FC = () => {
               )}
               <button
                 type="submit"
-                className="mr-1.5 min-h-[34px] px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-semibold rounded-md transition-colors shrink-0"
+                className="mr-1.5 min-h-[36px] px-4 py-1.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs sm:text-sm font-semibold rounded-lg transition-colors shrink-0 cursor-pointer shadow-xs"
               >
                 Search
               </button>
@@ -209,10 +209,10 @@ export const HomePage: React.FC = () => {
           </form>
 
           {/* Public Contribution CTA */}
-          <div className="mt-4 flex items-center justify-center">
+          <div className="mt-3.5 sm:mt-4 flex items-center justify-center w-full max-w-md mx-auto">
             <Link
               to="/contribute"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:from-blue-800 active:to-indigo-800 text-white text-xs sm:text-sm font-semibold rounded-lg shadow-sm hover:shadow transition-all"
+              className="w-full flex items-center justify-center gap-2 py-3 px-5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-xs hover:shadow transition-all min-h-[44px]"
             >
               <Upload className="w-4 h-4" />
               <span>Contribute Study Materials</span>
@@ -222,33 +222,33 @@ export const HomePage: React.FC = () => {
       </section>
 
       {/* 2. Curriculum Subjects Section */}
-      <section className="w-full max-w-7xl mx-auto min-w-0 px-3.5 sm:px-6 lg:px-8 box-border">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 sm:mb-4">
+      <section className="w-full max-w-7xl mx-auto min-w-0 px-4 sm:px-6 lg:px-8 box-border">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 mb-3 sm:mb-4">
           <div>
             <h2 className="text-base sm:text-xl font-bold text-slate-900">Curriculum Subjects</h2>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
               Choose your semester and subject to find notes, assignments, and practicals.
             </p>
+            <Link
+              to="/subjects"
+              className="mt-1 inline-block text-xs sm:text-sm font-semibold text-blue-600 hover:text-blue-800"
+            >
+              All Subjects &rarr;
+            </Link>
           </div>
-          <Link
-            to="/subjects"
-            className="text-xs font-semibold text-blue-600 hover:text-blue-800 shrink-0 self-start sm:self-auto"
-          >
-            All Subjects &rarr;
-          </Link>
         </div>
 
         {/* Dynamic Semester Selection Tabs */}
         {semesters.length > 0 && (
-          <div className="w-full max-w-full min-w-0 overflow-x-auto pb-2 mb-4 no-scrollbar touch-pan-x">
-            <div className="inline-flex items-center gap-1.5 min-w-max">
+          <div className="w-full max-w-full min-w-0 overflow-x-auto pb-2 mb-4 no-scrollbar touch-pan-x scroll-smooth">
+            <div className="inline-flex items-center gap-2 min-w-max">
               <button
                 type="button"
                 onClick={() => setSelectedSemesterId('all')}
-                className={`min-h-[36px] px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors border cursor-pointer ${
+                className={`min-h-[38px] px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-colors border cursor-pointer ${
                   selectedSemesterId === 'all'
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 font-medium'
                 }`}
               >
                 All Semesters
@@ -260,10 +260,10 @@ export const HomePage: React.FC = () => {
                     key={sem.id}
                     type="button"
                     onClick={() => setSelectedSemesterId(sem.id)}
-                    className={`min-h-[36px] px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors border cursor-pointer ${
+                    className={`min-h-[38px] px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-colors border cursor-pointer ${
                       isSelected
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 font-medium'
                     }`}
                   >
                     {sem.name}
@@ -311,20 +311,20 @@ export const HomePage: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
             {filteredSubjects.map((sub) => {
               return (
                 <Link
                   key={sub.id}
                   to={`/subjects/${sub.id}`}
-                  className="group bg-white border border-slate-200 rounded-xl p-4 sm:p-5 hover:border-blue-400 hover:shadow-sm transition-all flex flex-col justify-between active:scale-[0.99] active:bg-slate-50 touch-manipulation cursor-pointer"
+                  className="group bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 hover:border-blue-400 hover:shadow-xs transition-all flex flex-col justify-between active:scale-[0.99] active:bg-slate-50 touch-manipulation cursor-pointer"
                 >
                   <div>
-                    <h3 className="text-base sm:text-lg font-bold text-slate-900 group-hover:text-blue-600 transition-colors leading-snug">
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900 group-hover:text-blue-600 transition-colors leading-snug break-words">
                       {sub.name}
                     </h3>
                     <div className="mt-1.5 flex items-center flex-wrap gap-2 text-xs text-slate-500">
-                      <span className="font-mono text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                      <span className="font-mono text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/80 text-[11px] font-medium">
                         Code: {sub.code}
                       </span>
                       <span className="text-slate-300">·</span>
@@ -333,7 +333,7 @@ export const HomePage: React.FC = () => {
                       </span>
                     </div>
                     {sub.description && (
-                      <p className="mt-2 text-xs text-slate-500 line-clamp-2">
+                      <p className="mt-2 text-xs text-slate-500 line-clamp-2 leading-relaxed">
                         {sub.description}
                       </p>
                     )}

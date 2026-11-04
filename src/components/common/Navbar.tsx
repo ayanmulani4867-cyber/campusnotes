@@ -172,7 +172,13 @@ export const Navbar: React.FC = () => {
           <div className="flex lg:hidden items-center">
             <button
               type="button"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              onClick={() => {
+                if (typeof window !== 'undefined' && window.innerWidth < 768) {
+                  window.dispatchEvent(new CustomEvent('campusnotes:toggle-more-menu'));
+                  return;
+                }
+                setMobileMenuOpen(!mobileMenuOpen);
+              }}
               className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center p-2.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
               aria-label="Toggle menu"
               aria-expanded={mobileMenuOpen}

@@ -9,7 +9,7 @@ export const Footer: React.FC = () => {
 
   if (isAdminLogin) {
     return (
-      <footer className="bg-slate-50 text-slate-600 border-t border-slate-200 py-6 mt-auto">
+      <footer className="bg-slate-50 text-slate-600 border-t border-slate-200 py-6 pb-[calc(5rem+env(safe-area-inset-bottom))] md:py-6 mt-auto">
         <div className="max-w-md mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500 text-center sm:text-left">
           <p>&copy; {new Date().getFullYear()} CampusNotes</p>
           <p className="font-medium text-slate-600">
@@ -21,7 +21,7 @@ export const Footer: React.FC = () => {
   }
 
   return (
-    <footer className="bg-slate-50 text-slate-600 border-t border-slate-200">
+    <footer className="bg-slate-50 text-slate-600 border-t border-slate-200 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* Col 1: Branding */}
